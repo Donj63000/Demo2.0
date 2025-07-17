@@ -1,0 +1,12 @@
+#Participants
+Thalata;0;
+Neikaz;0;
+Coca;55000;Coiffe obji
+TEST;50000;x
+#Objets
+Coiffe obji
+x
+Coiffe obji
+x
+#Bonus
+50000000
