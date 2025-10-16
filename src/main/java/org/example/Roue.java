@@ -16,39 +16,25 @@ import javafx.scene.shape.Circle;
 import javafx.scene.shape.Polygon;
 import javafx.util.Duration;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 
-/**
- * Roue de loterie – une couleur par ticket ; la case gagnante clignote
- * en arc‑en‑ciel grâce à un Timeline cyclique, avec pulsation + halo.
- */
 public class Roue {
 
-    /* ============================================================ */
-    /* 1)  Paramètres visuels                                       */
-    /* ============================================================ */
     private static final double HUB_RADIUS      = Main.WHEEL_RADIUS * .28;
-    private static final Color  HUB_STROKE      = Color.web("#d4af37");
+    private static final Color  HUB_STROKE      = Theme.ACCENT;
     private static final double HUB_STROKE_W    = 3;
-
     private static final Color  SECTOR_BORDER   = Color.rgb(0,0,0,.25);
     private static final double SECTOR_BORDER_W = 1.1;
-
     private static final double GOLDEN_ANGLE    = 137.50776405003785;
 
-    /* ============================================================ */
-    /* 2)  Couleur unique par index                                 */
-    /* ============================================================ */
     private static Color colorByIndex(int idx){
         double h = (idx * GOLDEN_ANGLE) % 360;
         return Color.hsb(h, .85, .90);
     }
 
-    /* ============================================================ */
-    /* 3)  Attributs                                                */
-    /* ============================================================ */
     private final StackPane root;
     private final Group     wheelGroup;
     private final RotateTransition rot;
@@ -59,15 +45,11 @@ public class Roue {
     private Color[]  seatColors;
 
     private Polygon  cursor;
-    private ParallelTransition winFx;
+    private Timeline rainbowLoop;
     private Consumer<String>   spinCallback;
 
-    // drag
     private double dragX, dragY;
 
-    /* ============================================================ */
-    /* 4)  Constructeur                                             */
-    /* ============================================================ */
     public Roue(Resultat res){
         this.resultat = res;
         this.rot = new RotateTransition();
@@ -83,23 +65,17 @@ public class Roue {
 
         cursor = new Polygon( 0,-(Main.WHEEL_RADIUS+10), -14,-(Main.WHEEL_RADIUS-6), 14,-(Main.WHEEL_RADIUS-6));
         cursor.setFill(Color.WHITE);
-        cursor.setStroke(Color.web("#ec407a"));
-        cursor.setStrokeWidth(1.3);
+        cursor.setStroke(Theme.ACCENT_LIGHT);
+        cursor.setStrokeWidth(1.5);
         root.getChildren().add(cursor);
 
         enableDrag();
     }
 
-    /* ============================================================ */
-    /* 5)  API                                                      */
-    /* ============================================================ */
     public Node getRootPane(){ return root; }
     public void resetPosition(){ root.setTranslateX(0); root.setTranslateY(0); }
     public void setOnSpinFinished(Consumer<String> cb){ spinCallback = cb; }
 
-    /* ============================================================ */
-    /* 6)  Construction                                             */
-    /* ============================================================ */
     public void updateWheelDisplay(ObservableList<String> tickets){
         buildSeatArrays(tickets, OptionRoue.getLosingTickets());
 
@@ -120,12 +96,9 @@ public class Roue {
         wheelGroup.getChildren().add(buildHub());
     }
 
-    /* ============================================================ */
-    /* 7)  Spin (2 signatures)                                      */
-    /* ============================================================ */
     public void spinTheWheel(ObservableList<String> t){ updateWheelDisplay(t); spinTheWheel(); }
     public void spinTheWheel(){
-        if(winFx!=null){ winFx.stop(); clearHighlight(); }
+        stopHighlight();
 
         int total = seatNames==null?0:seatNames.length;
         if(total==0){ resultat.setMessage("Aucun ticket – impossible de lancer la roue."); return; }
@@ -148,65 +121,51 @@ public class Roue {
         rot.play();
     }
 
-    /* ============================================================ */
-    /* 8)  Effet gagnant : arc‑en‑ciel dynamique                    */
-    /* ============================================================ */
     private void highlightWinner(int idx){
         if(idx<0||idx>=arcs.size()) return;
         Arc a = arcs.get(idx);
 
-        /* --- Halo + épaisseur ------------------------------------ */
         a.setStrokeWidth(SECTOR_BORDER_W*2);
-        Glow g = new Glow(.8); a.setEffect(g);
+        a.setEffect(new Glow(.8));
 
-        /* --- Pulsation ------------------------------------------- */
-        ScaleTransition pulse = new ScaleTransition(Duration.seconds(.55), a);
-        pulse.setFromX(1); pulse.setFromY(1);
-        pulse.setToX(1.14); pulse.setToY(1.14);
-        pulse.setCycleCount(Animation.INDEFINITE);
-        pulse.setAutoReverse(true);
-
-        /* --- Cycle arc‑en‑ciel (fill ET stroke) ------------------ */
-        Timeline rainbow = new Timeline();
-        double durationS = 1.2;              // durée d’un cycle complet
-        int    steps     = 12;               // résolution couleur
+        rainbowLoop = new Timeline();
+        double durationS = 1.5;
+        int    steps     = 20;
         for(int i=0;i<=steps;i++){
             double frac = (double)i/steps;
             Color col = Color.hsb(frac*360,1,1);
-            rainbow.getKeyFrames().add(
+            rainbowLoop.getKeyFrames().add(
                     new KeyFrame(Duration.seconds(frac*durationS),
                             new KeyValue(a.fillProperty(), col),
                             new KeyValue(a.strokeProperty(), col))
             );
         }
-        rainbow.setCycleCount(Animation.INDEFINITE);
-
-        winFx = new ParallelTransition(pulse, rainbow);
-        winFx.setOnFinished(e-> clearHighlight());
-        winFx.play();
+        rainbowLoop.setCycleCount(Animation.INDEFINITE);
+        rainbowLoop.play();
     }
-    private void clearHighlight(){
+    private void stopHighlight(){
+        if(rainbowLoop!=null) rainbowLoop.stop();
         arcs.forEach(x->{ x.setEffect(null); x.setStroke(SECTOR_BORDER); x.setStrokeWidth(SECTOR_BORDER_W); });
     }
 
-    /* ============================================================ */
-    /* 9)  Dessin : secteurs, anneaux, moyeu                        */
-    /* ============================================================ */
     private void addDecorRings(){
         Circle border = new Circle(Main.WHEEL_RADIUS+.6, Color.TRANSPARENT);
-        border.setStroke(Color.BLACK); border.setStrokeWidth(1.2);
+        border.setStroke(Color.BLACK);
+        border.setStrokeWidth(1.2);
 
-        Circle gold = new Circle(Main.WHEEL_RADIUS+4, Color.TRANSPARENT);
-        gold.setStroke(Color.web("#ffd54f")); gold.setStrokeWidth(6);
+        Circle accentRing = new Circle(Main.WHEEL_RADIUS+4, Color.TRANSPARENT);
+        accentRing.setStroke(new LinearGradient(0,0,1,1,true, CycleMethod.NO_CYCLE,
+                new Stop(0, Theme.ACCENT_LIGHT), new Stop(1, Theme.ACCENT)));
+        accentRing.setStrokeWidth(6);
 
-        wheelGroup.getChildren().addAll(border, gold);
+        wheelGroup.getChildren().addAll(border, accentRing);
     }
     private Arc buildSector(double start,double extent,Color base,boolean loser){
         Arc arc = new Arc(0,0, Main.WHEEL_RADIUS, Main.WHEEL_RADIUS, start, extent);
         arc.setType(ArcType.ROUND);
 
         Paint p = loser
-                ? Color.rgb(35,35,35)
+                ? Color.rgb(40,40,40)
                 : new LinearGradient(0,0,1,1,true,CycleMethod.NO_CYCLE,
                 new Stop(0, base.brighter()),
                 new Stop(.45, base),
@@ -220,14 +179,12 @@ public class Roue {
     private Circle buildHub(){
         Circle c = new Circle(HUB_RADIUS,
                 new RadialGradient(0,0,.3,.3,1,true,CycleMethod.NO_CYCLE,
-                        new Stop(0, Color.web("#fffef9")), new Stop(1, Color.web("#e0c97f"))));
-        c.setStroke(HUB_STROKE); c.setStrokeWidth(HUB_STROKE_W);
+                        new Stop(0, Theme.ACCENT_LIGHT), new Stop(1, Theme.ACCENT)));
+        c.setStroke(HUB_STROKE);
+        c.setStrokeWidth(HUB_STROKE_W);
         return c;
     }
 
-    /* ============================================================ */
-    /* 10)  Données : distribution des tickets                      */
-    /* ============================================================ */
     private void buildSeatArrays(ObservableList<String> tickets,int losers){
         int P = tickets.size(), T = P + losers;
         seatNames  = new String[T];
@@ -242,15 +199,11 @@ public class Roue {
             seatColors[idx] = colorByIndex(colorIdx++);
             acc += step;
         }
-        // perdants gris
         for(int i=0;i<T;i++){
             if(seatNames[i]==null) seatColors[i]= Color.rgb(30,30,30);
         }
     }
 
-    /* ============================================================ */
-    /* 11)  Drag & drop                                             */
-    /* ============================================================ */
     private void enableDrag(){
         root.setOnMousePressed(e->{ dragX=e.getSceneX()-root.getTranslateX(); dragY=e.getSceneY()-root.getTranslateY(); root.setCursor(Cursor.CLOSED_HAND);} );
         root.setOnMouseDragged(e->{ root.setTranslateX(e.getSceneX()-dragX); root.setTranslateY(e.getSceneY()-dragY);} );
