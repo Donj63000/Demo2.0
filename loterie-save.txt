@@ -1,12 +1,14 @@
 #Participants
 Thalata;0;
 Neikaz;0;
-Coca;55000;Coiffe obji
-TEST;50000;x
+Coca;0;Coiffe obji
+TEST;0;x
 #Objets
 Coiffe obji
 x
 Coiffe obji
 x
+Coiffe obji
+x
 #Bonus
-50000000
+0

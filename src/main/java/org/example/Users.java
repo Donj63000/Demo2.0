@@ -95,4 +95,11 @@ public class Users {
         return FXCollections.observableArrayList(participants.stream().map(Participant::getName).toList());
     }
     public Node getRootPane(){ return root; }
+
+    public void resetKamasToZero() {
+        for (Participant participant : participants) {
+            participant.setKamas(0);
+        }
+        table.refresh();
+    }
 }

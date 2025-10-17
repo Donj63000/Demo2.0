@@ -57,12 +57,12 @@ public class Historique extends Stage {
     }
 
     /** Ajoute une ligne dans l'historique pour le tirage indiqué. */
-    public void logResult(String pseudo) {
+    public void logResult(String pseudo, int payoutKamas) {
         StringBuilder sb = new StringBuilder();
         sb.append(LocalDateTime.now().format(FORMATTER)).append(" - ");
         if (pseudo != null) {
             sb.append("Vainqueur : ").append(pseudo).append(" - Gains : ")
-                    .append(gains.getTotalKamas()).append(" k");
+                    .append(payoutKamas).append(" k");
             if (!gains.getObjets().isEmpty()) {
                 sb.append(" + ").append(String.join(", ", gains.getObjets()));
             }

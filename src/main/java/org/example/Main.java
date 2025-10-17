@@ -65,6 +65,8 @@ public class Main extends Application {
         // === 3) Gains (droite) ===
         Gains gains = new Gains(users.getParticipants());
         Historique historique = new Historique(gains);
+        DonationsLedger donationsLedger = new DonationsLedger();
+        gains.setCarryOver(donationsLedger.computeCarryOver());
         VBox rightBox = new VBox(10, gains.getRootPane());
         // Padding-top = 0 => ils sont “collés” sous le titre
         rightBox.setPadding(new Insets(0, 20, 10, 10));
@@ -76,7 +78,6 @@ public class Main extends Application {
 
         // === 4) Roue au centre ===
         Roue roue = new Roue(resultat);
-        roue.setOnSpinFinished(pseudo -> historique.logResult(pseudo));
         StackPane centerPane = new StackPane(roue.getRootPane());
         centerPane.setAlignment(Pos.CENTER);
         centerPane.setMaxSize(WHEEL_RADIUS * 2 + 50, WHEEL_RADIUS * 2 + 50);
@@ -135,8 +136,50 @@ public class Main extends Application {
         Button spinButton = new Button("Lancer la roue !");
         spinButton.setFont(Font.font("Arial", 16));
         spinButton.setOnAction(e -> {
-            roue.updateWheelDisplay(users.getParticipantNames());
-            roue.spinTheWheel(users.getParticipantNames());
+            int sumParticipants = users.getParticipants().stream().mapToInt(Participant::getKamas).sum();
+            int bonus = gains.getExtraKamas();
+            int roundTotal = sumParticipants + bonus;
+
+            if (roundTotal <= 0) {
+                resultat.setMessage("Aucune mise ce tour.");
+                return;
+            }
+
+            try {
+                final int roundId = donationsLedger.getNextRoundId();
+
+                donationsLedger.appendRoundDonations(roundId, users.getParticipants(), bonus);
+                gains.setCarryOver(donationsLedger.computeCarryOver());
+
+                users.resetKamasToZero();
+                gains.resetBonus();
+
+                roue.updateWheelDisplay(users.getParticipantNames());
+                final int payoutIfWin = gains.getCarryOver();
+
+                roue.setOnSpinFinished(pseudo -> {
+                    try {
+                        if (pseudo != null) {
+                            donationsLedger.appendPayout(roundId, pseudo, payoutIfWin);
+                            gains.setCarryOver(donationsLedger.computeCarryOver());
+                            resultat.setMessage(pseudo + " remporte " + formatKamas(payoutIfWin) + " k !");
+                            historique.logResult(pseudo, payoutIfWin);
+                        } else {
+                            resultat.setMessage("Perdu ! Cagnotte cumulée : "
+                                    + formatKamas(gains.getCarryOver()) + " k");
+                            historique.logResult(null, 0);
+                        }
+                    } catch (IOException ex) {
+                        resultat.setMessage("Erreur ledger (payout) : " + ex.getMessage());
+                        ex.printStackTrace();
+                    }
+                });
+
+                roue.spinTheWheel(users.getParticipantNames());
+            } catch (IOException ex) {
+                resultat.setMessage("Erreur ledger (commit dons) : " + ex.getMessage());
+                ex.printStackTrace();
+            }
         });
 
         Button optionsButton = new Button("Options...");
@@ -174,6 +217,9 @@ public class Main extends Application {
         Button historyButton = new Button("Historique");
         historyButton.setOnAction(e -> historique.show());
 
+        Button donationsHistoryButton = new Button("Historique des dons");
+        donationsHistoryButton.setOnAction(e -> new DonationsHistory(donationsLedger).show());
+
         // === Nouveau bouton "Plein écran" ===
         Button fullScreenButton = new Button("Plein écran");
         fullScreenButton.setOnAction(e -> {
@@ -189,13 +235,15 @@ public class Main extends Application {
         Theme.styleButton(saveButton);
         Theme.styleButton(cleanButton);
         Theme.styleButton(historyButton);
+        Theme.styleButton(donationsHistoryButton);
         Theme.styleButton(fullScreenButton);
 
         HBox bottomBox = new HBox(30,
                 spinButton, optionsButton, resetButton,
                 saveButton, cleanButton,
                 fullScreenButton,
-                historyButton
+                historyButton,
+                donationsHistoryButton
         );
         bottomBox.setAlignment(Pos.CENTER);
         bottomBox.setPadding(new Insets(16, 0, 20, 0));
@@ -210,6 +258,10 @@ public class Main extends Application {
         // primaryStage.setFullScreenExitHint("");
 
         primaryStage.show();
+    }
+
+    private static String formatKamas(int value) {
+        return String.format("%,d", value).replace(',', ' ');
     }
 
     public static void main(String[] args) {

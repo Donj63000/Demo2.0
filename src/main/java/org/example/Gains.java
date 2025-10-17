@@ -17,6 +17,7 @@ public class Gains {
     private final ObservableList<Participant> participants;
     private final ObservableList<String> objets;
     private final SimpleIntegerProperty extraKamas;
+    private final SimpleIntegerProperty carryOver = new SimpleIntegerProperty(0);
 
     // UI
     private final TextField txtExtra;
@@ -46,12 +47,10 @@ public class Gains {
         // ► Binding qui formate la cagnotte avec des espaces tous les 3 chiffres
         lblTotal.textProperty().bind(
                 Bindings.createStringBinding(() -> {
-                    int total = participants.stream().mapToInt(Participant::getKamas).sum()
-                            + extraKamas.get();
-                    // Mise en forme : ",d" produit "23,000,000" → on remplace ',' par ' '
+                    int total = computeCurrentTotal();
                     String formatted = String.format("%,d", total).replace(',', ' ');
                     return "Cagnotte : " + formatted + " 𝚔";
-                }, participants, extraKamas)
+                }, participants, extraKamas, carryOver)
         );
 
         // Bouton : ajoute le montant du champ à la cagnote
@@ -163,12 +162,33 @@ public class Gains {
         txtExtra.setText(String.valueOf(value));
     }
 
+    public void resetBonus() {
+        extraKamas.set(0);
+        txtExtra.setText("0");
+    }
+
+    public void setCarryOver(int value) {
+        carryOver.set(value);
+    }
+
+    public int getCarryOver() {
+        return carryOver.get();
+    }
+
+    public SimpleIntegerProperty carryOverProperty() {
+        return carryOver;
+    }
+
     public int getTotalKamas() {
-        // On récupère la valeur brute (sans espaces) via la regex
-        return Integer.parseInt(lblTotal.getText().replaceAll("[^0-9]", ""));
+        return computeCurrentTotal();
     }
 
     public ObservableList<String> getObjets() {
         return objets;
+    }
+
+    private int computeCurrentTotal() {
+        int participantsSum = participants.stream().mapToInt(Participant::getKamas).sum();
+        return carryOver.get() + participantsSum + extraKamas.get();
     }
 }
