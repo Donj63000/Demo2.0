@@ -1,5 +1,8 @@
 package org.example;
 
+import javafx.beans.binding.Bindings;
+import javafx.beans.property.ReadOnlyIntegerProperty;
+import javafx.beans.property.ReadOnlyIntegerWrapper;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
@@ -12,7 +15,9 @@ import javafx.scene.layout.VBox;
 
 import javafx.beans.value.ChangeListener;
 
+import java.text.NumberFormat;
 import java.util.IdentityHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 public class Gains {
@@ -22,6 +27,7 @@ public class Gains {
     private final ObservableList<String> objets;
     private final SimpleIntegerProperty extraKamas;
     private final SimpleIntegerProperty carryOver = new SimpleIntegerProperty(0);
+    private final ReadOnlyIntegerWrapper totalKamas = new ReadOnlyIntegerWrapper(0);
     private final Map<Participant, ChangeListener<Number>> kamasListeners = new IdentityHashMap<>();
     private final Map<Participant, ChangeListener<String>> donationListeners = new IdentityHashMap<>();
 
@@ -41,31 +47,29 @@ public class Gains {
         /* ========== 1) CAGNOTTE ========== */
         txtExtra = new TextField("0");
         txtExtra.setPrefWidth(60);
-        txtExtra.setOnAction(e -> parseExtra());
-        txtExtra.focusedProperty().addListener((obs, oldVal, newVal) -> {
-            if (!newVal) parseExtra();
-        });
         Theme.styleTextField(txtExtra);
 
         lblTotal = new Label();
         Theme.styleCapsuleLabel(lblTotal, "#4facfe", "#00f2fe");
 
-        refreshTotal();
-        extraKamas.addListener((obs, oldVal, newVal) -> refreshTotal());
-        carryOver.addListener((obs, oldVal, newVal) -> refreshTotal());
+        lblTotal.textProperty().bind(
+                Bindings.createStringBinding(
+                        () -> "Cagnotte : " + formatIntFr(totalKamas.get()) + " k",
+                        totalKamas
+                )
+        );
+        extraKamas.addListener((obs, oldVal, newVal) -> recomputeTotal());
+        carryOver.addListener((obs, oldVal, newVal) -> recomputeTotal());
 
         // Bouton : ajoute le montant du champ à la cagnote
         Button btnAddKamas = new Button("Ajouter");
         Theme.styleButton(btnAddKamas);
-        btnAddKamas.setOnAction(e -> parseExtra());
+        btnAddKamas.setOnAction(e -> applyBonusDelta(true));
 
         // Bouton : supprime le montant complémentaire
         Button btnRemoveKamas = new Button("Supprimer");
         Theme.styleButton(btnRemoveKamas);
-        btnRemoveKamas.setOnAction(e -> {
-            extraKamas.set(0);
-            txtExtra.setText("0");
-        });
+        btnRemoveKamas.setOnAction(e -> applyBonusDelta(false));
 
         /* ========== 2) OBJETS ========== */
         listView = new ListView<>(objets);
@@ -124,11 +128,11 @@ public class Gains {
                 }
             }
             refreshObjets();
-            refreshTotal();
+            recomputeTotal();
         });
         participants.forEach(this::attachParticipantListeners);
         refreshObjets();
-        refreshTotal();
+        recomputeTotal();
 
         VBox objetsBox = new VBox(6, lblObjets, listView, txtNew, btnAdd, btnDel);
         objetsBox.setPadding(new Insets(8, 0, 0, 0));
@@ -146,13 +150,19 @@ public class Gains {
         );
     }
 
-    private void parseExtra() {
-        try {
-            extraKamas.set(Integer.parseInt(txtExtra.getText().trim()));
-        } catch (NumberFormatException ex) {
-            txtExtra.setText(String.valueOf(extraKamas.get()));
+    private void applyBonusDelta(boolean add) {
+        int delta = parseIntSafe(txtExtra.getText(), 0);
+        if (delta <= 0) {
+            showWarn("Saisis un entier > 0");
+            txtExtra.selectAll();
+            return;
         }
-        refreshTotal();
+        if (add) {
+            setExtraKamas(getExtraKamas() + delta);
+        } else {
+            setExtraKamas(Math.max(0, getExtraKamas() - delta));
+        }
+        txtExtra.clear();
     }
 
     private void refreshObjets() {
@@ -173,20 +183,23 @@ public class Gains {
     }
 
     public void setExtraKamas(int value) {
-        extraKamas.set(value);
-        txtExtra.setText(String.valueOf(value));
-        refreshTotal();
+        int sanitized = Math.max(0, value);
+        if (sanitized != extraKamas.get()) {
+            extraKamas.set(sanitized);
+        } else {
+            recomputeTotal();
+        }
+        txtExtra.setText(String.valueOf(sanitized));
     }
 
     public void resetBonus() {
         extraKamas.set(0);
         txtExtra.setText("0");
-        refreshTotal();
+        recomputeTotal();
     }
 
     public void setCarryOver(int value) {
-        carryOver.set(value);
-        refreshTotal();
+        carryOver.set(Math.max(0, value));
     }
 
     public int getCarryOver() {
@@ -197,30 +210,23 @@ public class Gains {
         return carryOver;
     }
 
+    public ReadOnlyIntegerProperty totalKamasProperty() {
+        return totalKamas.getReadOnlyProperty();
+    }
+
     public int getTotalKamas() {
-        return computeCurrentTotal();
+        return totalKamas.get();
     }
 
     public ObservableList<String> getObjets() {
         return objets;
     }
 
-    private int computeCurrentTotal() {
-        int participantsSum = participants.stream().mapToInt(Participant::getKamas).sum();
-        return carryOver.get() + participantsSum + extraKamas.get();
-    }
-
-    private void refreshTotal() {
-        int total = computeCurrentTotal();
-        String formatted = String.format("%,d", total).replace(',', ' ');
-        lblTotal.setText("Cagnotte : " + formatted + " 𝚔");
-    }
-
     private void attachParticipantListeners(Participant participant) {
         if (participant == null) {
             return;
         }
-        ChangeListener<Number> kamasListener = (obs, oldVal, newVal) -> refreshTotal();
+        ChangeListener<Number> kamasListener = (obs, oldVal, newVal) -> recomputeTotal();
         participant.kamasProperty().addListener(kamasListener);
         kamasListeners.put(participant, kamasListener);
 
@@ -241,5 +247,34 @@ public class Gains {
         if (donationListener != null) {
             participant.donationProperty().removeListener(donationListener);
         }
+        recomputeTotal();
+    }
+
+    private void recomputeTotal() {
+        int sumPlayers = participants.stream().mapToInt(Participant::getKamas).sum();
+        int bonus = Math.max(0, extraKamas.get());
+        int co = Math.max(0, carryOver.get());
+        totalKamas.set(co + sumPlayers + bonus);
+    }
+
+    private static int parseIntSafe(String value, int defaultValue) {
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException ex) {
+            return defaultValue;
+        }
+    }
+
+    private static void showWarn(String msg) {
+        new Alert(Alert.AlertType.WARNING, msg, ButtonType.OK).showAndWait();
+    }
+
+    private static String formatIntFr(int value) {
+        NumberFormat nf = NumberFormat.getIntegerInstance(Locale.FRANCE);
+        String formatted = nf.format(value);
+        return formatted.replace('\u00A0', ' ');
     }
 }
