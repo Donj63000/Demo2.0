@@ -15,9 +15,7 @@ import javafx.scene.layout.VBox;
 
 import javafx.beans.value.ChangeListener;
 
-import java.text.NumberFormat;
 import java.util.IdentityHashMap;
-import java.util.Locale;
 import java.util.Map;
 
 public class Gains {
@@ -48,13 +46,17 @@ public class Gains {
         txtExtra = new TextField("0");
         txtExtra.setPrefWidth(60);
         Theme.styleTextField(txtExtra);
+        txtExtra.setTextFormatter(new TextFormatter<>(change -> {
+            String next = change.getControlNewText();
+            return next.matches("[0-9kKmMgG., _\u00A0]*") ? change : null;
+        }));
 
         lblTotal = new Label();
         Theme.styleCapsuleLabel(lblTotal, "#4facfe", "#00f2fe");
 
         lblTotal.textProperty().bind(
                 Bindings.createStringBinding(
-                        () -> "Cagnotte : " + formatIntFr(totalKamas.get()) + " k",
+                        () -> "Cagnotte : " + Kamas.formatFr(totalKamas.get()) + " k",
                         totalKamas
                 )
         );
@@ -151,7 +153,7 @@ public class Gains {
     }
 
     private void applyBonusDelta(boolean add) {
-        int delta = parseIntSafe(txtExtra.getText(), 0);
+        int delta = Kamas.parseFlexible(txtExtra.getText(), 0);
         if (delta <= 0) {
             showWarn("Saisis un entier > 0");
             txtExtra.selectAll();
@@ -189,7 +191,7 @@ public class Gains {
         } else {
             recomputeTotal();
         }
-        txtExtra.setText(String.valueOf(sanitized));
+        txtExtra.setText(Kamas.formatFr(sanitized));
     }
 
     public void resetBonus() {
@@ -257,24 +259,7 @@ public class Gains {
         totalKamas.set(co + sumPlayers + bonus);
     }
 
-    private static int parseIntSafe(String value, int defaultValue) {
-        if (value == null || value.isBlank()) {
-            return defaultValue;
-        }
-        try {
-            return Integer.parseInt(value.trim());
-        } catch (NumberFormatException ex) {
-            return defaultValue;
-        }
-    }
-
     private static void showWarn(String msg) {
         new Alert(Alert.AlertType.WARNING, msg, ButtonType.OK).showAndWait();
-    }
-
-    private static String formatIntFr(int value) {
-        NumberFormat nf = NumberFormat.getIntegerInstance(Locale.FRANCE);
-        String formatted = nf.format(value);
-        return formatted.replace('\u00A0', ' ');
     }
 }

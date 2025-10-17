@@ -105,11 +105,7 @@ public class Main extends Application {
                         continue;
                     }
                     if (bonusPart) {
-                        try {
-                            gains.setExtraKamas(Integer.parseInt(line.trim()));
-                        } catch (NumberFormatException ignore) {
-                            gains.setExtraKamas(0);
-                        }
+                        gains.setExtraKamas(Kamas.parseFlexible(line, 0));
                     } else if (objetsPart) {
                         gains.getObjets().add(line);
                     } else {
@@ -118,7 +114,7 @@ public class Main extends Application {
                             users.getParticipants().add(
                                     new Participant(
                                             parts[0],
-                                            Integer.parseInt(parts[1]),
+                                            Kamas.parseFlexible(parts[1], 0),
                                             parts[2]
                                     )
                             );

@@ -5,6 +5,7 @@ import javafx.collections.ListChangeListener;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.TextFieldTableCell;
+import javafx.scene.control.TextFormatter;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
@@ -49,7 +50,17 @@ public class Users {
                 setStyle("-fx-text-fill:" + Theme.toWebColor(c) + ";");
             }
         });
-        colKamas.setCellFactory(c -> new TextFieldTableCell<>(new NonNegativeIntegerStringConverter()));
+        colKamas.setCellFactory(c -> new TextFieldTableCell<>(new IntegerStringConverter() {
+            @Override
+            public Integer fromString(String value) {
+                return Kamas.parseFlexible(value, 0);
+            }
+
+            @Override
+            public String toString(Integer value) {
+                return Kamas.formatFr(value == null ? 0 : Math.max(0, value));
+            }
+        }));
         colDon  .setCellFactory(TextFieldTableCell.forTableColumn());
 
         colNom.setOnEditCommit(event -> {
@@ -61,7 +72,8 @@ public class Users {
         colKamas.setOnEditCommit(event -> {
             Participant participant = event.getRowValue();
             if (participant != null) {
-                int value = Math.max(0, event.getNewValue());
+                Integer newVal = event.getNewValue();
+                int value = newVal == null ? 0 : Math.max(0, newVal);
                 participant.setKamas(value);
             }
         });
@@ -82,13 +94,18 @@ public class Users {
         TextField tKamas = new TextField(); tKamas.setPromptText("Kamas"); Theme.styleTextField(tKamas);
         TextField tDon   = new TextField(); tDon.setPromptText("Don");    Theme.styleTextField(tDon);
 
+        tKamas.setTextFormatter(new TextFormatter<>(change -> {
+            String next = change.getControlNewText();
+            return next.matches("[0-9kKmMgG., _\u00A0]*") ? change : null;
+        }));
+
         Button add = new Button("Ajouter");   Theme.styleButton(add);
         Button del = new Button("Supprimer"); Theme.styleButton(del);
 
         add.setOnAction(e -> {
             String n = tNom.getText().trim();
             if(!n.isEmpty()){
-                int k = parseSafeInt(tKamas.getText(), 0);
+                int k = Kamas.parseFlexible(tKamas.getText(), 0);
                 participants.add(new Participant(n,k,tDon.getText().trim()));
                 tNom.clear(); tKamas.clear(); tDon.clear();
             }
@@ -144,31 +161,5 @@ public class Users {
 
     public void clearAll() {
         participants.clear();
-    }
-
-    private static int parseSafeInt(String value, int defaultValue) {
-        if (value == null || value.isBlank()) {
-            return defaultValue;
-        }
-        try {
-            return Integer.parseInt(value.trim());
-        } catch (NumberFormatException ex) {
-            return defaultValue;
-        }
-    }
-
-    private static final class NonNegativeIntegerStringConverter extends IntegerStringConverter {
-        @Override
-        public Integer fromString(String value) {
-            if (value == null || value.isBlank()) {
-                return 0;
-            }
-            try {
-                int parsed = Integer.parseInt(value.trim());
-                return parsed < 0 ? 0 : parsed;
-            } catch (NumberFormatException ex) {
-                return 0;
-            }
-        }
     }
 }
