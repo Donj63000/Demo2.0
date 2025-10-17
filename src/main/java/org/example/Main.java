@@ -13,8 +13,8 @@ import javafx.stage.Stage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import org.example.Historique;
+import java.util.HashSet;
+import java.util.Set;
 
 public class Main extends Application {
 
@@ -28,6 +28,14 @@ public class Main extends Application {
     // Durée du spin
     public static final double SPIN_DURATION = 5.0; // en secondes
 
+    private DonationsLedger donationsLedger;
+    private Integer currentRoundId;
+    private Users users;
+    private Gains gains;
+    private Historique historique;
+    private Resultat resultat;
+    private Roue roue;
+
     @Override
     public void start(Stage primaryStage) {
         // Root principal
@@ -35,7 +43,7 @@ public class Main extends Application {
 
         // === 1) Titre + Résultat (en haut) ===
         Titre bandeau = new Titre();
-        Resultat resultat = new Resultat();
+        resultat = new Resultat();
 
         // Rapprochés : spacing = 4 px
         HBox topBox = new HBox(resultat.getNode());
@@ -52,7 +60,7 @@ public class Main extends Application {
         root.setBackground(Theme.makeBackgroundCover("/img.png"));
 
         // === 2) Participants (gauche) ===
-        Users users = new Users();
+        users = new Users();
         VBox leftBox = new VBox(10, users.getRootPane());
         // On supprime le padding-top
         leftBox.setPadding(new Insets(0, 10, 10, 20));
@@ -63,9 +71,9 @@ public class Main extends Application {
         root.setLeft(leftBox);
 
         // === 3) Gains (droite) ===
-        Gains gains = new Gains(users.getParticipants());
-        Historique historique = new Historique(gains);
-        DonationsLedger donationsLedger = new DonationsLedger();
+        gains = new Gains(users.getParticipants());
+        historique = new Historique(gains);
+        donationsLedger = new DonationsLedger();
         gains.setCarryOver(donationsLedger.computeCarryOver());
         VBox rightBox = new VBox(10, gains.getRootPane());
         // Padding-top = 0 => ils sont “collés” sous le titre
@@ -77,7 +85,7 @@ public class Main extends Application {
         root.setRight(rightBox);
 
         // === 4) Roue au centre ===
-        Roue roue = new Roue(resultat);
+        roue = new Roue(resultat);
         StackPane centerPane = new StackPane(roue.getRootPane());
         centerPane.setAlignment(Pos.CENTER);
         centerPane.setMaxSize(WHEEL_RADIUS * 2 + 50, WHEEL_RADIUS * 2 + 50);
@@ -133,53 +141,87 @@ public class Main extends Application {
         );
 
         // === 5) Boutons en bas ===
+        Button btnNouveauxPayants = new Button("Nouveaux payants");
+        btnNouveauxPayants.setOnAction(e -> {
+            NouveauxPayantsDialog dialog = new NouveauxPayantsDialog(users.getParticipants(), result -> {
+                Set<String> namesPaid = new HashSet<>();
+                for (NouveauxPayantsDialog.Payant payant : result.payants) {
+                    namesPaid.add(payant.name);
+                    Participant existing = users.findByNameIgnoreCase(payant.name);
+                    if (existing == null) {
+                        users.getParticipants().add(new Participant(payant.name, payant.kamas, "-"));
+                    } else {
+                        existing.setKamas(payant.kamas);
+                    }
+                }
+
+                if (result.retirerAnciensNonPayants) {
+                    users.removeParticipantsNotIn(namesPaid);
+                }
+
+                if (!result.payants.isEmpty()) {
+                    currentRoundId = (currentRoundId == null)
+                            ? donationsLedger.getNextRoundId()
+                            : currentRoundId;
+                    resultat.setMessage("Payants mis à jour pour le tour #" + currentRoundId);
+                } else {
+                    resultat.setMessage("Aucun payant sélectionné.");
+                }
+
+                roue.updateWheelDisplay(users.getParticipantNames());
+            });
+            dialog.initOwner(primaryStage);
+            dialog.showAndWait();
+        });
+
         Button spinButton = new Button("Lancer la roue !");
         spinButton.setFont(Font.font("Arial", 16));
         spinButton.setOnAction(e -> {
-            int sumParticipants = users.getParticipants().stream().mapToInt(Participant::getKamas).sum();
-            int bonus = gains.getExtraKamas();
-            int roundTotal = sumParticipants + bonus;
+            Integer committedRound = commitRoundIfNeeded();
+            int payoutIfWin = gains.getCarryOver();
+            var tickets = users.getParticipantNames();
 
-            if (roundTotal <= 0) {
-                resultat.setMessage("Aucune mise ce tour.");
+            if (tickets.isEmpty()) {
+                resultat.setMessage("Aucun participant pour ce tirage.");
                 return;
             }
 
-            try {
-                final int roundId = donationsLedger.getNextRoundId();
-
-                donationsLedger.appendRoundDonations(roundId, users.getParticipants(), bonus);
-                gains.setCarryOver(donationsLedger.computeCarryOver());
-
-                users.resetKamasToZero();
-                gains.resetBonus();
-
-                roue.updateWheelDisplay(users.getParticipantNames());
-                final int payoutIfWin = gains.getCarryOver();
-
-                roue.setOnSpinFinished(pseudo -> {
-                    try {
-                        if (pseudo != null) {
-                            donationsLedger.appendPayout(roundId, pseudo, payoutIfWin);
-                            gains.setCarryOver(donationsLedger.computeCarryOver());
-                            resultat.setMessage(pseudo + " remporte " + formatKamas(payoutIfWin) + " k !");
-                            historique.logResult(pseudo, payoutIfWin);
-                        } else {
-                            resultat.setMessage("Perdu ! Cagnotte cumulée : "
-                                    + formatKamas(gains.getCarryOver()) + " k");
-                            historique.logResult(null, 0);
-                        }
-                    } catch (IOException ex) {
-                        resultat.setMessage("Erreur ledger (payout) : " + ex.getMessage());
-                        ex.printStackTrace();
-                    }
-                });
-
-                roue.spinTheWheel(users.getParticipantNames());
-            } catch (IOException ex) {
-                resultat.setMessage("Erreur ledger (commit dons) : " + ex.getMessage());
-                ex.printStackTrace();
+            if (committedRound == null && payoutIfWin <= 0) {
+                resultat.setMessage("Aucune mise enregistrée pour ce tour.");
+                return;
             }
+
+            final Integer roundForPayout = committedRound;
+            final int payoutSnapshot = payoutIfWin;
+
+            roue.setOnSpinFinished(winnerName -> {
+                try {
+                    if (winnerName != null) {
+                        if (payoutSnapshot > 0) {
+                            int roundId = (roundForPayout != null)
+                                    ? roundForPayout
+                                    : donationsLedger.getNextRoundId();
+                            donationsLedger.appendPayout(roundId, winnerName, payoutSnapshot);
+                            gains.setCarryOver(donationsLedger.computeCarryOver());
+                        }
+                        String message = payoutSnapshot > 0
+                                ? winnerName + " remporte " + formatKamas(payoutSnapshot) + " k !"
+                                : winnerName + " remporte la loterie !";
+                        resultat.setMessage(message);
+                        historique.logResult(winnerName, payoutSnapshot);
+                    } else {
+                        resultat.setMessage("Perdu ! Cagnotte cumulée : "
+                                + formatKamas(gains.getCarryOver()) + " k");
+                        historique.logResult(null, 0);
+                    }
+                } catch (IOException ex) {
+                    resultat.setMessage("Erreur payout : " + ex.getMessage());
+                    ex.printStackTrace();
+                }
+            });
+
+            roue.updateWheelDisplay(tickets);
+            roue.spinTheWheel(tickets);
         });
 
         Button optionsButton = new Button("Options...");
@@ -208,9 +250,30 @@ public class Main extends Application {
         Button cleanButton = new Button("Nettoyer");
         cleanButton.setOnAction(e -> {
             Save.reset(users.getParticipants(), gains.getObjets());
-            gains.setExtraKamas(0);
+            gains.resetBonus();
             roue.updateWheelDisplay(users.getParticipantNames());
             resultat.setMessage("Nouvelle loterie prête");
+        });
+
+        Button btnFin = new Button("Fin de la loterie");
+        btnFin.setOnAction(e -> {
+            Integer rid = commitRoundIfNeeded();
+            try {
+                users.clearAll();
+                gains.getObjets().clear();
+                gains.resetBonus();
+                Save.save(users.getParticipants(), gains.getObjets(), gains.getExtraKamas());
+                gains.setCarryOver(donationsLedger.computeCarryOver());
+                roue.updateWheelDisplay(users.getParticipantNames());
+                currentRoundId = null;
+                String msg = "Loterie clôturée. "
+                        + (rid != null ? "Tour #" + rid + " enregistré. " : "")
+                        + "Cagnotte cumulée : " + formatKamas(gains.getCarryOver()) + " k.";
+                resultat.setMessage(msg);
+            } catch (IOException ex) {
+                resultat.setMessage("Erreur lors de la fermeture : " + ex.getMessage());
+                ex.printStackTrace();
+            }
         });
 
         // Bouton Historique
@@ -229,18 +292,21 @@ public class Main extends Application {
         });
 
         // Style
+        Theme.styleButton(btnNouveauxPayants);
         Theme.styleButton(spinButton);
         Theme.styleButton(optionsButton);
         Theme.styleButton(resetButton);
         Theme.styleButton(saveButton);
         Theme.styleButton(cleanButton);
+        Theme.styleButton(btnFin);
         Theme.styleButton(historyButton);
         Theme.styleButton(donationsHistoryButton);
         Theme.styleButton(fullScreenButton);
 
         HBox bottomBox = new HBox(30,
+                btnNouveauxPayants,
                 spinButton, optionsButton, resetButton,
-                saveButton, cleanButton,
+                saveButton, cleanButton, btnFin,
                 fullScreenButton,
                 historyButton,
                 donationsHistoryButton
@@ -251,13 +317,36 @@ public class Main extends Application {
 
         // === 6) Scène + Stage ===
         Scene scene = new Scene(root, SCENE_WIDTH, SCENE_HEIGHT);
-        primaryStage.setTitle("Loterie de la guilde Markarth [By Coca]");
+        primaryStage.setTitle("Loterie de la guilde Evolution [By Coca]");
         primaryStage.setScene(scene);
 
         // -> Optionnel : enlever l'indication pour quitter le fullscreen
         // primaryStage.setFullScreenExitHint("");
 
         primaryStage.show();
+    }
+
+    private Integer commitRoundIfNeeded() {
+        int sumParticipants = users.getParticipants().stream().mapToInt(Participant::getKamas).sum();
+        int bonus = gains.getExtraKamas();
+        int total = sumParticipants + bonus;
+        if (total <= 0) {
+            return null;
+        }
+
+        try {
+            int roundId = (currentRoundId != null) ? currentRoundId : donationsLedger.getNextRoundId();
+            donationsLedger.appendRoundDonations(roundId, users.getParticipants(), bonus);
+            gains.setCarryOver(donationsLedger.computeCarryOver());
+            users.resetKamasToZero();
+            gains.resetBonus();
+            currentRoundId = null;
+            return roundId;
+        } catch (IOException ex) {
+            resultat.setMessage("Erreur lors de l'enregistrement des dons : " + ex.getMessage());
+            ex.printStackTrace();
+            return null;
+        }
     }
 
     private static String formatKamas(int value) {

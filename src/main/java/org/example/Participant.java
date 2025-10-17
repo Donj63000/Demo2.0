@@ -7,34 +7,49 @@ package org.example;
  * - Donation (objet éventuel)
  */
 public class Participant {
-    private final String name;
-    private int kamas;         // Mise en kamas
-    private String donation;   // Texte libre : "Cape Obsi", "-", etc.
+    private final javafx.beans.property.StringProperty name;
+    private final javafx.beans.property.IntegerProperty kamas;
+    private final javafx.beans.property.StringProperty donation;
 
     public Participant(String name, int kamas, String donation) {
-        this.name = name;
-        this.kamas = kamas;
-        this.donation = donation;
+        this.name = new javafx.beans.property.SimpleStringProperty(this, "name", name);
+        this.kamas = new javafx.beans.property.SimpleIntegerProperty(this, "kamas", kamas);
+        this.donation = new javafx.beans.property.SimpleStringProperty(this, "donation", donation);
     }
 
-    /* ============== Getters et Setters ============== */
     public String getName() {
+        return name.get();
+    }
+
+    public void setName(String value) {
+        name.set(value);
+    }
+
+    public javafx.beans.property.StringProperty nameProperty() {
         return name;
     }
 
     public int getKamas() {
+        return kamas.get();
+    }
+
+    public void setKamas(int value) {
+        kamas.set(value);
+    }
+
+    public javafx.beans.property.IntegerProperty kamasProperty() {
         return kamas;
     }
 
-    public void setKamas(int kamas) {
-        this.kamas = kamas;
-    }
-
     public String getDonation() {
-        return donation;
+        return donation.get();
     }
 
-    public void setDonation(String donation) {
-        this.donation = donation;
+    public void setDonation(String value) {
+        donation.set(value);
+    }
+
+    public javafx.beans.property.StringProperty donationProperty() {
+        return donation;
     }
 }

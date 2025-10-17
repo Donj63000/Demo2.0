@@ -1,6 +1,5 @@
 package org.example;
 
-import javafx.beans.property.*;
 import javafx.collections.*;
 import javafx.collections.ListChangeListener;
 import javafx.scene.Node;
@@ -10,6 +9,8 @@ import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.util.converter.IntegerStringConverter;
+
+import java.util.Set;
 
 /**
  * Table des participants : chaque ligne reçoit une couleur unique,
@@ -30,9 +31,9 @@ public class Users {
         TableColumn<Participant,Integer> colKamas = new TableColumn<>("Kamas");
         TableColumn<Participant,String>  colDon   = new TableColumn<>("Don");
 
-        colNom  .setCellValueFactory(p -> new SimpleStringProperty (p.getValue().getName()));
-        colKamas.setCellValueFactory(p -> new SimpleIntegerProperty(p.getValue().getKamas()).asObject());
-        colDon  .setCellValueFactory(p -> new SimpleStringProperty (p.getValue().getDonation()));
+        colNom  .setCellValueFactory(p -> p.getValue().nameProperty());
+        colKamas.setCellValueFactory(p -> p.getValue().kamasProperty().asObject());
+        colDon  .setCellValueFactory(p -> p.getValue().donationProperty());
 
         /* === Cellule colorée par INDEX de ligne ======================= */
         colNom.setCellFactory(column -> new TableCell<>() {
@@ -51,6 +52,25 @@ public class Users {
         colKamas.setCellFactory(c -> new TextFieldTableCell<>(new IntegerStringConverter()));
         colDon  .setCellFactory(TextFieldTableCell.forTableColumn());
 
+        colNom.setOnEditCommit(event -> {
+            Participant participant = event.getRowValue();
+            if (participant != null) {
+                participant.setName(event.getNewValue());
+            }
+        });
+        colKamas.setOnEditCommit(event -> {
+            Participant participant = event.getRowValue();
+            if (participant != null) {
+                participant.setKamas(event.getNewValue() == null ? 0 : event.getNewValue());
+            }
+        });
+        colDon.setOnEditCommit(event -> {
+            Participant participant = event.getRowValue();
+            if (participant != null) {
+                participant.setDonation(event.getNewValue());
+            }
+        });
+
         table.getColumns().addAll(colNom, colKamas, colDon);
         table.setEditable(true);
         table.setPrefHeight(600);
@@ -67,7 +87,7 @@ public class Users {
         add.setOnAction(e -> {
             String n = tNom.getText().trim();
             if(!n.isEmpty()){
-                int k = tKamas.getText().isBlank()?0:Integer.parseInt(tKamas.getText());
+                int k = parseSafeInt(tKamas.getText(), 0);
                 participants.add(new Participant(n,k,tDon.getText().trim()));
                 tNom.clear(); tKamas.clear(); tDon.clear();
             }
@@ -101,5 +121,38 @@ public class Users {
             participant.setKamas(0);
         }
         table.refresh();
+    }
+
+    public Participant findByNameIgnoreCase(String name) {
+        for (Participant participant : participants) {
+            if (participant.getName().equalsIgnoreCase(name)) {
+                return participant;
+            }
+        }
+        return null;
+    }
+
+    public void removeParticipantsNotIn(Set<String> namesToKeep) {
+        if (namesToKeep == null || namesToKeep.isEmpty()) {
+            participants.clear();
+        } else {
+            participants.removeIf(participant -> namesToKeep.stream()
+                    .noneMatch(n -> n.equalsIgnoreCase(participant.getName())));
+        }
+    }
+
+    public void clearAll() {
+        participants.clear();
+    }
+
+    private static int parseSafeInt(String value, int defaultValue) {
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException ex) {
+            return defaultValue;
+        }
     }
 }

@@ -1,6 +1,5 @@
 package org.example;
 
-import javafx.beans.binding.Bindings;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
@@ -11,6 +10,11 @@ import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
+import javafx.beans.value.ChangeListener;
+
+import java.util.IdentityHashMap;
+import java.util.Map;
+
 public class Gains {
 
     // Données principales
@@ -18,6 +22,8 @@ public class Gains {
     private final ObservableList<String> objets;
     private final SimpleIntegerProperty extraKamas;
     private final SimpleIntegerProperty carryOver = new SimpleIntegerProperty(0);
+    private final Map<Participant, ChangeListener<Number>> kamasListeners = new IdentityHashMap<>();
+    private final Map<Participant, ChangeListener<String>> donationListeners = new IdentityHashMap<>();
 
     // UI
     private final TextField txtExtra;
@@ -44,14 +50,9 @@ public class Gains {
         lblTotal = new Label();
         Theme.styleCapsuleLabel(lblTotal, "#4facfe", "#00f2fe");
 
-        // ► Binding qui formate la cagnotte avec des espaces tous les 3 chiffres
-        lblTotal.textProperty().bind(
-                Bindings.createStringBinding(() -> {
-                    int total = computeCurrentTotal();
-                    String formatted = String.format("%,d", total).replace(',', ' ');
-                    return "Cagnotte : " + formatted + " 𝚔";
-                }, participants, extraKamas, carryOver)
-        );
+        refreshTotal();
+        extraKamas.addListener((obs, oldVal, newVal) -> refreshTotal());
+        carryOver.addListener((obs, oldVal, newVal) -> refreshTotal());
 
         // Bouton : ajoute le montant du champ à la cagnote
         Button btnAddKamas = new Button("Ajouter");
@@ -113,8 +114,21 @@ public class Gains {
         Theme.styleCapsuleLabel(lblObjets, "#ff9a9e", "#fad0c4");
 
         // Mise à jour auto depuis les participants
-        participants.addListener((ListChangeListener<Participant>) change -> refreshObjets());
+        participants.addListener((ListChangeListener<Participant>) change -> {
+            while (change.next()) {
+                if (change.wasAdded()) {
+                    change.getAddedSubList().forEach(this::attachParticipantListeners);
+                }
+                if (change.wasRemoved()) {
+                    change.getRemoved().forEach(this::detachParticipantListeners);
+                }
+            }
+            refreshObjets();
+            refreshTotal();
+        });
+        participants.forEach(this::attachParticipantListeners);
         refreshObjets();
+        refreshTotal();
 
         VBox objetsBox = new VBox(6, lblObjets, listView, txtNew, btnAdd, btnDel);
         objetsBox.setPadding(new Insets(8, 0, 0, 0));
@@ -138,6 +152,7 @@ public class Gains {
         } catch (NumberFormatException ex) {
             txtExtra.setText(String.valueOf(extraKamas.get()));
         }
+        refreshTotal();
     }
 
     private void refreshObjets() {
@@ -160,15 +175,18 @@ public class Gains {
     public void setExtraKamas(int value) {
         extraKamas.set(value);
         txtExtra.setText(String.valueOf(value));
+        refreshTotal();
     }
 
     public void resetBonus() {
         extraKamas.set(0);
         txtExtra.setText("0");
+        refreshTotal();
     }
 
     public void setCarryOver(int value) {
         carryOver.set(value);
+        refreshTotal();
     }
 
     public int getCarryOver() {
@@ -190,5 +208,38 @@ public class Gains {
     private int computeCurrentTotal() {
         int participantsSum = participants.stream().mapToInt(Participant::getKamas).sum();
         return carryOver.get() + participantsSum + extraKamas.get();
+    }
+
+    private void refreshTotal() {
+        int total = computeCurrentTotal();
+        String formatted = String.format("%,d", total).replace(',', ' ');
+        lblTotal.setText("Cagnotte : " + formatted + " 𝚔");
+    }
+
+    private void attachParticipantListeners(Participant participant) {
+        if (participant == null) {
+            return;
+        }
+        ChangeListener<Number> kamasListener = (obs, oldVal, newVal) -> refreshTotal();
+        participant.kamasProperty().addListener(kamasListener);
+        kamasListeners.put(participant, kamasListener);
+
+        ChangeListener<String> donationListener = (obs, oldVal, newVal) -> refreshObjets();
+        participant.donationProperty().addListener(donationListener);
+        donationListeners.put(participant, donationListener);
+    }
+
+    private void detachParticipantListeners(Participant participant) {
+        if (participant == null) {
+            return;
+        }
+        ChangeListener<Number> kamasListener = kamasListeners.remove(participant);
+        if (kamasListener != null) {
+            participant.kamasProperty().removeListener(kamasListener);
+        }
+        ChangeListener<String> donationListener = donationListeners.remove(participant);
+        if (donationListener != null) {
+            participant.donationProperty().removeListener(donationListener);
+        }
     }
 }

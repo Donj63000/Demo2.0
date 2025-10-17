@@ -24,7 +24,7 @@ public class Titre {
     private final Rectangle shimmer;
 
     public Titre() {
-        title = new Text("Grande Loterie de la guilde Markarth");
+        title = new Text("Grande Loterie de la guilde Evolution");
         title.setFont(Font.font("Poppins", FontWeight.EXTRA_BOLD, 38));
         title.setBoundsType(TextBoundsType.VISUAL);
         title.setFill(makeGradient());
