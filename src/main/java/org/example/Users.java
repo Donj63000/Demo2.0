@@ -49,7 +49,7 @@ public class Users {
                 setStyle("-fx-text-fill:" + Theme.toWebColor(c) + ";");
             }
         });
-        colKamas.setCellFactory(c -> new TextFieldTableCell<>(new IntegerStringConverter()));
+        colKamas.setCellFactory(c -> new TextFieldTableCell<>(new NonNegativeIntegerStringConverter()));
         colDon  .setCellFactory(TextFieldTableCell.forTableColumn());
 
         colNom.setOnEditCommit(event -> {
@@ -61,7 +61,8 @@ public class Users {
         colKamas.setOnEditCommit(event -> {
             Participant participant = event.getRowValue();
             if (participant != null) {
-                participant.setKamas(event.getNewValue() == null ? 0 : event.getNewValue());
+                int value = Math.max(0, event.getNewValue());
+                participant.setKamas(value);
             }
         });
         colDon.setOnEditCommit(event -> {
@@ -153,6 +154,21 @@ public class Users {
             return Integer.parseInt(value.trim());
         } catch (NumberFormatException ex) {
             return defaultValue;
+        }
+    }
+
+    private static final class NonNegativeIntegerStringConverter extends IntegerStringConverter {
+        @Override
+        public Integer fromString(String value) {
+            if (value == null || value.isBlank()) {
+                return 0;
+            }
+            try {
+                int parsed = Integer.parseInt(value.trim());
+                return parsed < 0 ? 0 : parsed;
+            } catch (NumberFormatException ex) {
+                return 0;
+            }
         }
     }
 }
