@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -34,11 +35,16 @@ public final class DonationsLedger {
         );
     }
 
-    public synchronized void appendRoundDonations(int roundId,
-                                                  ObservableList<Participant> participants,
-                                                  int bonus) throws IOException {
+    public synchronized void upsertRoundSnapshot(int roundId,
+                                                 ObservableList<Participant> participants,
+                                                 int bonus) throws IOException {
         ensureHeader();
-        List<String> lines = new ArrayList<>();
+        List<DonationEntry> allEntries = new ArrayList<>(loadAll());
+        allEntries.removeIf(entry ->
+                entry.getRoundId() == roundId
+                        && (entry.getType() == DonationEntry.Type.DON
+                        || entry.getType() == DonationEntry.Type.BONUS));
+
         LocalDateTime now = LocalDateTime.now();
 
         for (Participant participant : participants) {
@@ -46,35 +52,26 @@ public final class DonationsLedger {
             if (amount <= 0) {
                 continue;
             }
-            DonationEntry entry = new DonationEntry(
+            allEntries.add(new DonationEntry(
                     now,
                     roundId,
                     DonationEntry.Type.DON,
                     participant.getName(),
                     amount
-            );
-            lines.add(entry.toCsv());
+            ));
         }
 
         if (bonus > 0) {
-            DonationEntry bonusEntry = new DonationEntry(
+            allEntries.add(new DonationEntry(
                     now,
                     roundId,
                     DonationEntry.Type.BONUS,
                     "__BONUS__",
                     bonus
-            );
-            lines.add(bonusEntry.toCsv());
+            ));
         }
 
-        if (!lines.isEmpty()) {
-            Files.writeString(
-                    LEDGER_FILE,
-                    String.join(System.lineSeparator(), lines) + System.lineSeparator(),
-                    StandardCharsets.UTF_8,
-                    StandardOpenOption.APPEND
-            );
-        }
+        writeAll(allEntries);
     }
 
     public synchronized void appendPayout(int roundId, String winner, int amount) throws IOException {
@@ -148,6 +145,20 @@ public final class DonationsLedger {
         return totals;
     }
 
+    public synchronized List<RoundRecord> getRoundRecords() {
+        Map<Integer, RoundAccumulator> perRound = new TreeMap<>();
+        for (DonationEntry entry : loadAll()) {
+            RoundAccumulator accumulator = perRound.computeIfAbsent(
+                    entry.getRoundId(),
+                    RoundAccumulator::new
+            );
+            accumulator.touch(entry);
+        }
+        return perRound.values().stream()
+                .map(RoundAccumulator::toRecord)
+                .collect(Collectors.toList());
+    }
+
     /**
      * Clears the ledger so the carry-over resets to zero while preserving the CSV header.
      */
@@ -159,5 +170,114 @@ public final class DonationsLedger {
                 StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING
         );
+    }
+
+    private void writeAll(List<DonationEntry> entries) throws IOException {
+        ensureHeader();
+        List<String> lines = new ArrayList<>();
+        lines.add(HEADER);
+        entries.stream()
+                .filter(entry -> entry != null)
+                .sorted(Comparator.comparing(DonationEntry::getTimestamp))
+                .map(DonationEntry::toCsv)
+                .forEach(lines::add);
+        Files.write(
+                LEDGER_FILE,
+                (String.join(System.lineSeparator(), lines) + System.lineSeparator())
+                        .getBytes(StandardCharsets.UTF_8),
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE,
+                StandardOpenOption.CREATE
+        );
+    }
+
+    public static final class RoundRecord {
+        private final int roundId;
+        private final LocalDateTime timestamp;
+        private final Map<String, Integer> donations;
+        private final int bonus;
+        private final String winner;
+        private final int payout;
+
+        private RoundRecord(int roundId,
+                            LocalDateTime timestamp,
+                            Map<String, Integer> donations,
+                            int bonus,
+                            String winner,
+                            int payout) {
+            this.roundId = roundId;
+            this.timestamp = timestamp;
+            this.donations = Map.copyOf(donations);
+            this.bonus = Math.max(0, bonus);
+            this.winner = winner;
+            this.payout = Math.max(0, payout);
+        }
+
+        public int roundId() {
+            return roundId;
+        }
+
+        public LocalDateTime timestamp() {
+            return timestamp;
+        }
+
+        public Map<String, Integer> donations() {
+            return donations;
+        }
+
+        public int bonus() {
+            return bonus;
+        }
+
+        public String winner() {
+            return winner;
+        }
+
+        public int payout() {
+            return payout;
+        }
+
+        public int pot() {
+            int totalDonations = donations.values().stream().mapToInt(Integer::intValue).sum();
+            return totalDonations + bonus;
+        }
+
+        public boolean hasWinner() {
+            return winner != null && !winner.isBlank();
+        }
+    }
+
+    private static final class RoundAccumulator {
+        private final int roundId;
+        private final Map<String, Integer> donations = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        private int bonus;
+        private String winner;
+        private int payout;
+        private LocalDateTime timestamp;
+
+        private RoundAccumulator(int roundId) {
+            this.roundId = roundId;
+        }
+
+        private void touch(DonationEntry entry) {
+            if (entry.getTimestamp() != null) {
+                if (timestamp == null || entry.getTimestamp().isAfter(timestamp)) {
+                    timestamp = entry.getTimestamp();
+                }
+            }
+            switch (entry.getType()) {
+                case DON -> donations.put(entry.getPlayer(), entry.getAmount());
+                case BONUS -> bonus = entry.getAmount();
+                case PAYOUT -> {
+                    winner = entry.getPlayer();
+                    payout = entry.getAmount();
+                }
+            }
+        }
+
+        private RoundRecord toRecord() {
+            LocalDateTime ts = timestamp == null ? LocalDateTime.now() : timestamp;
+            return new RoundRecord(roundId, ts, donations, bonus, winner, payout);
+        }
     }
 }

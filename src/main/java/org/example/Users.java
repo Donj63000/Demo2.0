@@ -2,6 +2,7 @@ package org.example;
 
 import javafx.collections.*;
 import javafx.collections.ListChangeListener;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.TextFieldTableCell;
@@ -24,18 +25,22 @@ public class Users {
     private final VBox                        root         = new VBox(10);
 
     private static final double GOLDEN_ANGLE = 137.50776405003785;
-    private static final int DEFAULT_INSCRIPTION_K = 20_000;
+    private static final int DEFAULT_INSCRIPTION_K = Participant.DEFAULT_STAKE;
 
     public Users(){
 
         /* === Colonnes ================================================= */
-        TableColumn<Participant,String>  colNom   = new TableColumn<>("Nom");
-        TableColumn<Participant,Integer> colKamas = new TableColumn<>("Kamas");
-        TableColumn<Participant,String>  colDon   = new TableColumn<>("Don");
+        TableColumn<Participant,Boolean> colReplay = new TableColumn<>("Rejoue ?");
+        TableColumn<Participant,Boolean> colPaid   = new TableColumn<>("Payé ?");
+        TableColumn<Participant,String>  colNom    = new TableColumn<>("Nom");
+        TableColumn<Participant,Integer> colKamas  = new TableColumn<>("Kamas");
+        TableColumn<Participant,String>  colDon    = new TableColumn<>("Don");
 
         colNom  .setCellValueFactory(p -> p.getValue().nameProperty());
         colKamas.setCellValueFactory(p -> p.getValue().kamasProperty().asObject());
         colDon  .setCellValueFactory(p -> p.getValue().donationProperty());
+        colReplay.setCellValueFactory(p -> p.getValue().willReplayProperty());
+        colPaid.setCellValueFactory(p -> p.getValue().paidProperty());
 
         /* === Cellule colorée par INDEX de ligne ======================= */
         colNom.setCellFactory(column -> new TableCell<>() {
@@ -85,7 +90,15 @@ public class Users {
             }
         });
 
-        table.getColumns().addAll(colNom, colKamas, colDon);
+        colReplay.setCellFactory(column -> new ReplayTableCell());
+        colReplay.setPrefWidth(90);
+        colReplay.setEditable(true);
+
+        colPaid.setCellFactory(column -> new PaidTableCell());
+        colPaid.setPrefWidth(80);
+        colPaid.setEditable(true);
+
+        table.getColumns().setAll(colReplay, colPaid, colNom, colKamas, colDon);
         table.setEditable(true);
         table.setPrefHeight(600);
         Theme.styleTableView(table);
@@ -109,10 +122,14 @@ public class Users {
             String n = tNom.getText().trim();
             if(!n.isEmpty()){
                 String rawKamas = tKamas.getText();
-                int k = (rawKamas == null || rawKamas.trim().isEmpty())
+                int stake = (rawKamas == null || rawKamas.trim().isEmpty())
                         ? DEFAULT_INSCRIPTION_K
-                        : Kamas.parseFlexible(rawKamas, 0);
-                participants.add(new Participant(n,k,tDon.getText().trim()));
+                        : Kamas.parseFlexible(rawKamas, DEFAULT_INSCRIPTION_K);
+                Participant participant = new Participant(n, 0, tDon.getText().trim());
+                participant.setStake(stake > 0 ? stake : DEFAULT_INSCRIPTION_K);
+                participant.setPaid(false);
+                participant.setWillReplay(true);
+                participants.add(participant);
                 tNom.clear(); tKamas.clear(); tDon.clear();
             }
         });
@@ -136,7 +153,12 @@ public class Users {
     /* === API ========================================================== */
     public ObservableList<Participant> getParticipants(){ return participants; }
     public ObservableList<String> getParticipantNames(){
-        return FXCollections.observableArrayList(participants.stream().map(Participant::getName).toList());
+        return FXCollections.observableArrayList(
+                participants.stream()
+                        .filter(p -> p.isWillReplay() && p.isPaid())
+                        .map(Participant::getName)
+                        .toList()
+        );
     }
     public Node getRootPane(){ return root; }
 
@@ -167,5 +189,97 @@ public class Users {
 
     public void clearAll() {
         participants.clear();
+    }
+
+    /** TableCell used for the "Rejoue ?" column. */
+    private static final class ReplayTableCell extends TableCell<Participant, Boolean> {
+        private final CheckBox checkBox = new CheckBox();
+
+        private ReplayTableCell() {
+            setAlignment(Pos.CENTER);
+            checkBox.setOnAction(event -> {
+                Participant participant = getTableRow() == null ? null : getTableRow().getItem();
+                if (participant == null) {
+                    return;
+                }
+                participant.setWillReplay(checkBox.isSelected());
+                updateBadge(participant.isWillReplay());
+            });
+        }
+
+        @Override
+        protected void updateItem(Boolean item, boolean empty) {
+            super.updateItem(item, empty);
+            if (empty) {
+                setGraphic(null);
+                setStyle("");
+                return;
+            }
+            Participant participant = getTableRow() == null ? null : getTableRow().getItem();
+            boolean selected = participant != null && participant.isWillReplay();
+            checkBox.setSelected(selected);
+            setGraphic(checkBox);
+            updateBadge(selected);
+        }
+
+        private void updateBadge(boolean selected) {
+            setStyle(selected
+                    ? "-fx-background-color: rgba(46, 204, 113, 0.35);"
+                    : "-fx-background-color: rgba(231, 76, 60, 0.35);");
+        }
+    }
+
+    /** TableCell used for the "Payé ?" column with automatic stake adjustments. */
+    private static final class PaidTableCell extends TableCell<Participant, Boolean> {
+        private final CheckBox checkBox = new CheckBox();
+
+        private PaidTableCell() {
+            setAlignment(Pos.CENTER);
+            checkBox.setOnAction(event -> {
+                Participant participant = getTableRow() == null ? null : getTableRow().getItem();
+                if (participant == null) {
+                    return;
+                }
+                boolean shouldBePaid = checkBox.isSelected();
+                boolean currentlyPaid = participant.isPaid();
+                if (currentlyPaid == shouldBePaid) {
+                    updateBadge(shouldBePaid);
+                    return;
+                }
+                participant.setPaid(shouldBePaid);
+                int stakeAmount = participant.getStake();
+                if (stakeAmount <= 0) {
+                    stakeAmount = DEFAULT_INSCRIPTION_K;
+                    participant.setStake(stakeAmount);
+                }
+                if (shouldBePaid) {
+                    participant.setKamas(Math.max(0, participant.getKamas() + stakeAmount));
+                } else {
+                    participant.setKamas(Math.max(0, participant.getKamas() - stakeAmount));
+                }
+                updateBadge(shouldBePaid);
+            });
+        }
+
+        @Override
+        protected void updateItem(Boolean item, boolean empty) {
+            super.updateItem(item, empty);
+            if (empty) {
+                setGraphic(null);
+                setStyle("");
+                return;
+            }
+            Participant participant = getTableRow() == null ? null : getTableRow().getItem();
+            boolean selected = participant != null && participant.isPaid();
+            checkBox.setSelected(selected);
+            setGraphic(checkBox);
+            updateBadge(selected);
+        }
+
+        private void updateBadge(boolean selected) {
+            setStyle(selected
+                    ? "-fx-background-color: rgba(46, 204, 113, 0.45);"
+                    : "-fx-background-color: rgba(231, 76, 60, 0.45);");
+        }
     }
 }

@@ -7,6 +7,7 @@ import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ListView;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import java.io.IOException;
@@ -24,12 +25,14 @@ public class Historique extends Stage {
     private final ObservableList<String> lignes = FXCollections.observableArrayList();
     private final ListView<String> listView;
     private final Gains gains;
+    private final DonationsLedger ledger;
     private static final Path FILE = Path.of("loterie-historique.txt");
     private static final DateTimeFormatter FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    public Historique(Gains gains) {
+    public Historique(Gains gains, DonationsLedger ledger) {
         this.gains = gains;
+        this.ledger = ledger;
         setTitle("Historique des tirages");
 
         listView = new ListView<>(lignes);
@@ -44,7 +47,14 @@ public class Historique extends Stage {
             }
         });
 
-        VBox root = new VBox(10, listView, btnSuppr);
+        Button btnDonations = new Button("Historique des dons");
+        Theme.styleButton(btnDonations);
+        btnDonations.setOnAction(e ->
+                new DonationsHistory(ledger, gains.totalKamasProperty()).show());
+
+        HBox actions = new HBox(10, btnSuppr, btnDonations);
+
+        VBox root = new VBox(10, listView, actions);
         root.setPadding(new Insets(10));
         Scene scene = new Scene(root, 400, 300);
         setScene(scene);

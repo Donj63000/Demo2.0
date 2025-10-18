@@ -1,6 +1,7 @@
 package org.example;
 
 import javafx.application.Application;
+import javafx.beans.value.ChangeListener;
 import javafx.collections.ListChangeListener;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -15,8 +16,12 @@ import javafx.stage.Stage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class Main extends Application {
 
@@ -37,6 +42,9 @@ public class Main extends Application {
     private Historique historique;
     private Resultat resultat;
     private Roue roue;
+    private final Map<Participant, ChangeListener<Boolean>> participationListeners = new IdentityHashMap<>();
+    private String lastSnapshotSignature;
+    private boolean wheelRefreshSuppressed;
 
     @Override
     public void start(Stage primaryStage) {
@@ -73,17 +81,17 @@ public class Main extends Application {
         root.setLeft(leftBox);
 
         // === 3) Gains (droite) ===
-        gains = new Gains(users.getParticipants());
-        historique = new Historique(gains);
         donationsLedger = new DonationsLedger();
+        gains = new Gains(users.getParticipants());
+        historique = new Historique(gains, donationsLedger);
         gains.setCarryOver(donationsLedger.computeCarryOver());
         VBox rightBox = new VBox(10, gains.getRootPane());
         // Padding-top = 0 => ils sont “collés” sous le titre
         rightBox.setPadding(new Insets(0, 20, 10, 10));
         rightBox.setAlignment(Pos.TOP_CENTER);
 
-        // Agrandit la zone : 460 px large × 820 px haut
-        rightBox.setPrefSize(460, 820);
+        // Agrandit la zone : 400 px large × 820 px haut
+        rightBox.setPrefSize(400, 820);
         root.setRight(rightBox);
 
         // === 4) Roue au centre ===
@@ -129,11 +137,20 @@ public class Main extends Application {
         }
 
         // Mise à jour initiale de la roue
+        users.getParticipants().forEach(this::attachParticipationListener);
         roue.updateWheelDisplay(users.getParticipantNames());
 
         // Surveille les changements sur la liste de participants
         users.getParticipants().addListener(
                 (ListChangeListener<Participant>) change -> {
+                    while (change.next()) {
+                        if (change.wasAdded()) {
+                            change.getAddedSubList().forEach(this::attachParticipationListener);
+                        }
+                        if (change.wasRemoved()) {
+                            change.getRemoved().forEach(this::detachParticipationListener);
+                        }
+                    }
                     roue.updateWheelDisplay(users.getParticipantNames());
                 }
         );
@@ -147,9 +164,16 @@ public class Main extends Application {
                     namesPaid.add(payant.name);
                     Participant existing = users.findByNameIgnoreCase(payant.name);
                     if (existing == null) {
-                        users.getParticipants().add(new Participant(payant.name, payant.kamas, "-"));
+                        Participant participant = new Participant(payant.name, payant.kamas, "-");
+                        participant.setStake(Math.max(0, payant.kamas));
+                        participant.setWillReplay(true);
+                        participant.setPaid(true);
+                        users.getParticipants().add(participant);
                     } else {
-                        existing.setKamas(payant.kamas);
+                        existing.setKamas(Math.max(0, existing.getKamas() + payant.kamas));
+                        existing.setStake(Math.max(0, payant.kamas));
+                        existing.setWillReplay(true);
+                        existing.setPaid(true);
                     }
                 }
 
@@ -175,53 +199,58 @@ public class Main extends Application {
         Button spinButton = new Button("Lancer la roue !");
         spinButton.setFont(Font.font("Arial", 16));
         spinButton.setOnAction(e -> {
-            int roundPotSnapshot = users.getParticipants().stream()
-                    .mapToInt(Participant::getKamas)
-                    .sum() + gains.getExtraKamas();
-            Integer committedRound = commitRoundIfNeeded();
-            int payoutIfWin = gains.getCarryOver();
+            if (spinButton.isDisable()) {
+                return;
+            }
+            spinButton.setDisable(true);
+
             var tickets = users.getParticipantNames();
 
             if (tickets.isEmpty()) {
-                resultat.setMessage("Aucun participant pour ce tirage.");
+                resultat.setMessage("Aucun participant validé (Rejoue ? + Payé ?).");
+                spinButton.setDisable(false);
                 return;
             }
 
-            if (committedRound == null && payoutIfWin <= 0) {
+            int potSnapshot = gains.getTotalKamas();
+            if (potSnapshot <= 0) {
                 resultat.setMessage("Aucune mise enregistrée pour ce tour.");
+                spinButton.setDisable(false);
                 return;
             }
 
-            final Integer roundForPayout = committedRound;
-            final int payoutSnapshot = payoutIfWin;
-            final int roundPot = roundPotSnapshot;
+            final int roundPot = potSnapshot;
+            final String snapshotSignature = buildSnapshotSignature();
+            final int[] roundIdRef = new int[1];
+            try {
+                roundIdRef[0] = ensureRoundSnapshot(snapshotSignature);
+            } catch (IOException ex) {
+                resultat.setMessage("Erreur enregistrement dons : " + ex.getMessage());
+                ex.printStackTrace();
+                spinButton.setDisable(false);
+                return;
+            }
+            final int snapshotRoundId = roundIdRef[0];
 
             roue.setOnSpinFinished(winnerName -> {
                 try {
                     if (winnerName != null) {
-                        if (payoutSnapshot > 0) {
-                            int roundId = (roundForPayout != null)
-                                    ? roundForPayout
-                                    : donationsLedger.getNextRoundId();
-                            donationsLedger.appendPayout(roundId, winnerName, payoutSnapshot);
-                            gains.setCarryOver(donationsLedger.computeCarryOver());
-                        }
-                        String message = payoutSnapshot > 0
-                                ? winnerName + " remporte " + formatKamas(payoutSnapshot) + " k !"
-                                : winnerName + " remporte la loterie !";
-                        resultat.setMessage(message);
-                        historique.logResult(winnerName, payoutSnapshot);
+                        donationsLedger.appendPayout(snapshotRoundId, winnerName, roundPot);
+                        finalizeRoundAndReset();
+                        resultat.setMessage(winnerName + " remporte " + formatKamas(roundPot) + " k !");
+                        historique.logResult(winnerName, roundPot);
                     } else {
-                        resultat.setMessage(
-                                "Perdu ! Cagnotte du tour : "
-                                        + formatKamas(roundPot) + " k | Cumul : "
-                                        + formatKamas(payoutSnapshot) + " k"
-                        );
+                        resultat.setMessage("Perdu ! Pot conservé : " + formatKamas(roundPot) + " k");
                         historique.logResult(null, 0);
                     }
                 } catch (IOException ex) {
                     resultat.setMessage("Erreur payout : " + ex.getMessage());
                     ex.printStackTrace();
+                } finally {
+                    withWheelRefreshSuppressed(() ->
+                            users.getParticipants().forEach(p -> p.setPaid(false))
+                    );
+                    spinButton.setDisable(false);
                 }
             });
 
@@ -256,6 +285,8 @@ public class Main extends Application {
         cleanButton.setOnAction(e -> {
             Save.reset(users.getParticipants(), gains.getObjets());
             gains.resetBonus();
+            currentRoundId = null;
+            lastSnapshotSignature = null;
             roue.updateWheelDisplay(users.getParticipantNames());
             resultat.setMessage("Nouvelle loterie prête");
         });
@@ -276,6 +307,8 @@ public class Main extends Application {
             try {
                 donationsLedger.resetCarryOver();
                 gains.setCarryOver(0);
+                currentRoundId = null;
+                lastSnapshotSignature = null;
                 resultat.setMessage("Cagnotte cumulée remise à 0.");
             } catch (IOException ex) {
                 resultat.setMessage("Erreur RAZ cagnotte cumulée : " + ex.getMessage());
@@ -285,7 +318,7 @@ public class Main extends Application {
 
         Button btnFin = new Button("Fin de la loterie");
         btnFin.setOnAction(e -> {
-            Integer rid = commitRoundIfNeeded();
+            Integer rid = finalizeRoundAndReset();
             try {
                 users.clearAll();
                 gains.getObjets().clear();
@@ -294,6 +327,7 @@ public class Main extends Application {
                 gains.setCarryOver(donationsLedger.computeCarryOver());
                 roue.updateWheelDisplay(users.getParticipantNames());
                 currentRoundId = null;
+                lastSnapshotSignature = null;
                 String msg = "Loterie clôturée. "
                         + (rid != null ? "Tour #" + rid + " enregistré. " : "")
                         + "Cagnotte cumulée : " + formatKamas(gains.getCarryOver()) + " k.";
@@ -307,9 +341,6 @@ public class Main extends Application {
         // Bouton Historique
         Button historyButton = new Button("Historique");
         historyButton.setOnAction(e -> historique.show());
-
-        Button donationsHistoryButton = new Button("Historique des dons");
-        donationsHistoryButton.setOnAction(e -> new DonationsHistory(donationsLedger).show());
 
         // === Nouveau bouton "Plein écran" ===
         Button fullScreenButton = new Button("Plein écran");
@@ -329,7 +360,6 @@ public class Main extends Application {
         Theme.styleButton(resetCarryButton);
         Theme.styleButton(btnFin);
         Theme.styleButton(historyButton);
-        Theme.styleButton(donationsHistoryButton);
         Theme.styleButton(fullScreenButton);
 
         HBox bottomBox = new HBox(30,
@@ -337,8 +367,7 @@ public class Main extends Application {
                 spinButton, optionsButton, resetButton,
                 saveButton, cleanButton, resetCarryButton, btnFin,
                 fullScreenButton,
-                historyButton,
-                donationsHistoryButton
+                historyButton
         );
         bottomBox.setAlignment(Pos.CENTER);
         bottomBox.setPadding(new Insets(16, 0, 20, 0));
@@ -355,27 +384,94 @@ public class Main extends Application {
         primaryStage.show();
     }
 
-    private Integer commitRoundIfNeeded() {
-        int sumParticipants = users.getParticipants().stream().mapToInt(Participant::getKamas).sum();
-        int bonus = gains.getExtraKamas();
-        int total = sumParticipants + bonus;
+    private void attachParticipationListener(Participant participant) {
+        if (participant == null || participationListeners.containsKey(participant)) {
+            return;
+        }
+        ChangeListener<Boolean> listener = (obs, oldVal, newVal) -> {
+            if (!wheelRefreshSuppressed) {
+                roue.updateWheelDisplay(users.getParticipantNames());
+            }
+        };
+        participant.willReplayProperty().addListener(listener);
+        participant.paidProperty().addListener(listener);
+        participationListeners.put(participant, listener);
+    }
+
+    private void detachParticipationListener(Participant participant) {
+        ChangeListener<Boolean> listener = participationListeners.remove(participant);
+        if (listener != null) {
+            participant.willReplayProperty().removeListener(listener);
+            participant.paidProperty().removeListener(listener);
+        }
+    }
+
+    private void withWheelRefreshSuppressed(Runnable action) {
+        boolean previous = wheelRefreshSuppressed;
+        wheelRefreshSuppressed = true;
+        try {
+            action.run();
+        } finally {
+            wheelRefreshSuppressed = previous;
+        }
+    }
+
+    private int ensureRoundSnapshot(String snapshotSignature) throws IOException {
+        int roundId = (currentRoundId != null) ? currentRoundId : donationsLedger.getNextRoundId();
+        if (lastSnapshotSignature == null
+                || !lastSnapshotSignature.equals(snapshotSignature)
+                || currentRoundId == null) {
+            donationsLedger.upsertRoundSnapshot(roundId, users.getParticipants(), gains.getExtraKamas());
+            gains.setCarryOver(donationsLedger.computeCarryOver());
+            lastSnapshotSignature = snapshotSignature;
+        }
+        currentRoundId = roundId;
+        return roundId;
+    }
+
+    private Integer finalizeRoundAndReset() {
+        int total = gains.getTotalKamas();
         if (total <= 0) {
+            withWheelRefreshSuppressed(() ->
+                    users.getParticipants().forEach(p -> p.setPaid(false))
+            );
+            currentRoundId = null;
+            lastSnapshotSignature = null;
             return null;
         }
-
+        String snapshotSignature = buildSnapshotSignature();
         try {
-            int roundId = (currentRoundId != null) ? currentRoundId : donationsLedger.getNextRoundId();
-            donationsLedger.appendRoundDonations(roundId, users.getParticipants(), bonus);
-            gains.setCarryOver(donationsLedger.computeCarryOver());
+            int roundId = ensureRoundSnapshot(snapshotSignature);
             users.resetKamasToZero();
             gains.resetBonus();
+            withWheelRefreshSuppressed(() ->
+                    users.getParticipants().forEach(p -> p.setPaid(false))
+            );
             currentRoundId = null;
+            lastSnapshotSignature = null;
+            gains.setCarryOver(donationsLedger.computeCarryOver());
             return roundId;
         } catch (IOException ex) {
             resultat.setMessage("Erreur lors de l'enregistrement des dons : " + ex.getMessage());
             ex.printStackTrace();
             return null;
         }
+    }
+
+    private String buildSnapshotSignature() {
+        String participantsSignature = users.getParticipants().stream()
+                .filter(p -> p.getKamas() > 0)
+                .sorted(Comparator.comparing(p -> {
+                    String name = p.getName();
+                    return name == null ? "" : name.toLowerCase();
+                }))
+                .map(p -> {
+                    String name = p.getName();
+                    String safeName = name == null ? "" : name.toLowerCase();
+                    return safeName + ":" + p.getKamas();
+                })
+                .collect(Collectors.joining("|"));
+        return participantsSignature + ";bonus=" + gains.getExtraKamas();
     }
 
     private static String formatKamas(int value) {
