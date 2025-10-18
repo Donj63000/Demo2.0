@@ -22,7 +22,7 @@ import java.util.Map;
 public final class DonationsHistory extends Stage {
 
     private static final DateTimeFormatter FORMAT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public DonationsHistory(DonationsLedger ledger) {
         setTitle("Historique des dons");
@@ -50,8 +50,8 @@ public final class DonationsHistory extends Stage {
         TableView<DonationEntry> table = new TableView<>(data);
         Theme.styleTableView(table);
 
-        TableColumn<DonationEntry, String> colDate = new TableColumn<>("Date");
-        colDate.setPrefWidth(150);
+        TableColumn<DonationEntry, String> colDate = new TableColumn<>("Horodatage");
+        colDate.setPrefWidth(180);
         colDate.setCellValueFactory(cell -> new SimpleStringProperty(
                 FORMAT.format(cell.getValue().getTimestamp())));
 

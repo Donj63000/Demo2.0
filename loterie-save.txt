@@ -1,14 +1,4 @@
 #Participants
-Thalata;0;
-Neikaz;0;
-Coca;0;Coiffe obji
-TEST;0;x
 #Objets
-Coiffe obji
-x
-Coiffe obji
-x
-Coiffe obji
-x
 #Bonus
 0
