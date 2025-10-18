@@ -38,10 +38,12 @@ public class Theme {
                         "-fx-border-radius: 18;" +
                         "-fx-border-color: rgba(255,255,255,0.28);" +
                         "-fx-border-width: 1.4;" +
-                        "-fx-text-fill: linear-gradient(to bottom, rgba(255,255,255,0.95), rgba(235,235,235,0.85));" +
+                        "-fx-text-fill: #ffffff;" +
+                        "-fx-text-alignment: center;" +
+                        "-fx-alignment: center;" +
                         "-fx-font-weight: bold;" +
-                        "-fx-font-size: 14px;" +
-                        "-fx-padding: 11 28;" +
+                        "-fx-font-size: 15px;" +
+                        "-fx-padding: 12 32;" +
                         "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 14, 0.25, 0, 6);";
         String hover =
                 "-fx-background-color: linear-gradient(to bottom, " + toWebColor(ACCENT_LIGHT.brighter()) + " 0%, " + toWebColor(ACCENT.brighter()) + " 100%);" +
@@ -54,6 +56,8 @@ public class Theme {
                 "-fx-border-color: rgba(255,255,255,0.6);" +
                         "-fx-border-width: 1.8;";
 
+        b.setWrapText(false);
+        b.setMnemonicParsing(false);
         b.setStyle(normal);
         b.setCursor(Cursor.HAND);
         b.setOnMouseEntered(e -> b.setStyle(normal + hover));
