@@ -147,4 +147,17 @@ public final class DonationsLedger {
         }
         return totals;
     }
+
+    /**
+     * Clears the ledger so the carry-over resets to zero while preserving the CSV header.
+     */
+    public synchronized void resetCarryOver() throws IOException {
+        Files.writeString(
+                LEDGER_FILE,
+                HEADER + System.lineSeparator(),
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING
+        );
+    }
 }

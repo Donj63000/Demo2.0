@@ -266,8 +266,8 @@ public class Gains {
     private void recomputeTotal() {
         int sumPlayers = participants.stream().mapToInt(Participant::getKamas).sum();
         int bonus = Math.max(0, extraKamas.get());
-        int co = Math.max(0, carryOver.get());
-        totalKamas.set(co + sumPlayers + bonus);
+        // Only show current round pot: participants + manual bonus.
+        totalKamas.set(sumPlayers + bonus);
     }
 
     private void resetBonusWithConfirmation() {

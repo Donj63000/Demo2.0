@@ -5,7 +5,9 @@ import javafx.collections.ListChangeListener;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
@@ -173,6 +175,9 @@ public class Main extends Application {
         Button spinButton = new Button("Lancer la roue !");
         spinButton.setFont(Font.font("Arial", 16));
         spinButton.setOnAction(e -> {
+            int roundPotSnapshot = users.getParticipants().stream()
+                    .mapToInt(Participant::getKamas)
+                    .sum() + gains.getExtraKamas();
             Integer committedRound = commitRoundIfNeeded();
             int payoutIfWin = gains.getCarryOver();
             var tickets = users.getParticipantNames();
@@ -189,6 +194,7 @@ public class Main extends Application {
 
             final Integer roundForPayout = committedRound;
             final int payoutSnapshot = payoutIfWin;
+            final int roundPot = roundPotSnapshot;
 
             roue.setOnSpinFinished(winnerName -> {
                 try {
@@ -206,8 +212,11 @@ public class Main extends Application {
                         resultat.setMessage(message);
                         historique.logResult(winnerName, payoutSnapshot);
                     } else {
-                        resultat.setMessage("Perdu ! Cagnotte cumulée : "
-                                + formatKamas(gains.getCarryOver()) + " k");
+                        resultat.setMessage(
+                                "Perdu ! Cagnotte du tour : "
+                                        + formatKamas(roundPot) + " k | Cumul : "
+                                        + formatKamas(payoutSnapshot) + " k"
+                        );
                         historique.logResult(null, 0);
                     }
                 } catch (IOException ex) {
@@ -249,6 +258,29 @@ public class Main extends Application {
             gains.resetBonus();
             roue.updateWheelDisplay(users.getParticipantNames());
             resultat.setMessage("Nouvelle loterie prête");
+        });
+
+        Button resetCarryButton = new Button("RAZ cagnotte cumulée");
+        resetCarryButton.setOnAction(e -> {
+            Alert confirm = new Alert(
+                    Alert.AlertType.CONFIRMATION,
+                    "Remettre la cagnotte cumulée (report) à 0 ?\n"
+                            + "Cette action réinitialise le fichier loterie-dons.csv.",
+                    ButtonType.YES,
+                    ButtonType.NO
+            );
+            confirm.setHeaderText("Réinitialiser la cagnotte cumulée");
+            if (confirm.showAndWait().orElse(ButtonType.NO) != ButtonType.YES) {
+                return;
+            }
+            try {
+                donationsLedger.resetCarryOver();
+                gains.setCarryOver(0);
+                resultat.setMessage("Cagnotte cumulée remise à 0.");
+            } catch (IOException ex) {
+                resultat.setMessage("Erreur RAZ cagnotte cumulée : " + ex.getMessage());
+                ex.printStackTrace();
+            }
         });
 
         Button btnFin = new Button("Fin de la loterie");
@@ -294,6 +326,7 @@ public class Main extends Application {
         Theme.styleButton(resetButton);
         Theme.styleButton(saveButton);
         Theme.styleButton(cleanButton);
+        Theme.styleButton(resetCarryButton);
         Theme.styleButton(btnFin);
         Theme.styleButton(historyButton);
         Theme.styleButton(donationsHistoryButton);
@@ -302,7 +335,7 @@ public class Main extends Application {
         HBox bottomBox = new HBox(30,
                 btnNouveauxPayants,
                 spinButton, optionsButton, resetButton,
-                saveButton, cleanButton, btnFin,
+                saveButton, cleanButton, resetCarryButton, btnFin,
                 fullScreenButton,
                 historyButton,
                 donationsHistoryButton
