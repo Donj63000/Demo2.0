@@ -2,6 +2,7 @@ package org.example;
 
 import javafx.animation.*;
 import javafx.collections.ObservableList;
+import javafx.scene.effect.DropShadow;
 import javafx.geometry.Pos;
 import javafx.scene.CacheHint;
 import javafx.scene.Cursor;
@@ -13,7 +14,6 @@ import javafx.scene.paint.*;
 import javafx.scene.shape.Arc;
 import javafx.scene.shape.ArcType;
 import javafx.scene.shape.Circle;
-import javafx.scene.shape.Polygon;
 import javafx.util.Duration;
 
 import java.util.ArrayList;
@@ -29,6 +29,7 @@ public class Roue {
     private static final Color  SECTOR_BORDER   = Color.rgb(0,0,0,.25);
     private static final double SECTOR_BORDER_W = 1.1;
     private static final double GOLDEN_ANGLE    = 137.50776405003785;
+    private static final double BASE_ANGULAR_SPEED = 360.0; // deg/s for constant perceived speed
 
     private static Color colorByIndex(int idx){
         double h = (idx * GOLDEN_ANGLE) % 360;
@@ -44,7 +45,6 @@ public class Roue {
     private String[] seatNames;
     private Color[]  seatColors;
 
-    private Polygon  cursor;
     private Timeline rainbowLoop;
     private Consumer<String>   spinCallback;
 
@@ -62,12 +62,6 @@ public class Roue {
         wheelGroup.setCache(true);
         wheelGroup.setCacheHint(CacheHint.ROTATE);
         root.getChildren().add(wheelGroup);
-
-        cursor = new Polygon( 0,-(Main.WHEEL_RADIUS+10), -14,-(Main.WHEEL_RADIUS-6), 14,-(Main.WHEEL_RADIUS-6));
-        cursor.setFill(Color.WHITE);
-        cursor.setStroke(Theme.ACCENT_LIGHT);
-        cursor.setStrokeWidth(1.5);
-        root.getChildren().add(cursor);
 
         enableDrag();
     }
@@ -93,6 +87,7 @@ public class Roue {
             wheelGroup.getChildren().add(a);
             start += step;
         }
+        wheelGroup.getChildren().add(buildGlossOverlay());
         wheelGroup.getChildren().add(buildHub());
     }
 
@@ -105,9 +100,13 @@ public class Roue {
 
         int idx = ThreadLocalRandom.current().nextInt(total);
         double step = 360d/total;
-        double end  = 1080 + idx*step + step/2 - 90;
+        double offset = idx * step + step / 2 - 90;
 
-        rot.setDuration(Duration.seconds(OptionRoue.getSpinDuration()));
+        double duration = OptionRoue.getSpinDuration();
+        double travel = BASE_ANGULAR_SPEED * duration;
+        double end = travel + offset;
+
+        rot.setDuration(Duration.seconds(duration));
         rot.setNode(wheelGroup);
         rot.setFromAngle(wheelGroup.getRotate());
         rot.setToAngle(wheelGroup.getRotate() + end);
@@ -149,23 +148,57 @@ public class Roue {
     }
 
     private void addDecorRings(){
-        Circle border = new Circle(Main.WHEEL_RADIUS+.6, Color.TRANSPARENT);
-        border.setStroke(Color.BLACK);
-        border.setStrokeWidth(1.2);
+        Group rings = new Group();
+        rings.setMouseTransparent(true);
 
-        Circle accentRing = new Circle(Main.WHEEL_RADIUS+4, Color.TRANSPARENT);
-        accentRing.setStroke(new LinearGradient(0,0,1,1,true, CycleMethod.NO_CYCLE,
-                new Stop(0, Theme.ACCENT_LIGHT), new Stop(1, Theme.ACCENT)));
-        accentRing.setStrokeWidth(6);
+        Circle baseShadow = new Circle(
+                Main.WHEEL_RADIUS + 28,
+                new RadialGradient(
+                        0, 0, 0.5, 0.5, 1, true, CycleMethod.NO_CYCLE,
+                        new Stop(0, Color.color(0, 0, 0, 0.35)),
+                        new Stop(1, Color.color(0, 0, 0, 0.0))
+                )
+        );
+        baseShadow.setTranslateY(18);
 
-        wheelGroup.getChildren().addAll(border, accentRing);
+        Circle outerRim = new Circle(Main.WHEEL_RADIUS + 6, Color.TRANSPARENT);
+        outerRim.setStroke(new LinearGradient(
+                0, 0, 1, 1, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Color.web("#182848")),
+                new Stop(1, Color.web("#0d1321"))
+        ));
+        outerRim.setStrokeWidth(12);
+
+        Circle accentRing = new Circle(Main.WHEEL_RADIUS + 2, Color.TRANSPARENT);
+        accentRing.setStroke(new LinearGradient(
+                0, 0, 1, 1, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Theme.ACCENT_LIGHT),
+                new Stop(0.6, Theme.ACCENT),
+                new Stop(1, Theme.ACCENT.darker())
+        ));
+        accentRing.setStrokeWidth(4);
+
+        Circle innerGlow = new Circle(Main.WHEEL_RADIUS - 18,
+                new RadialGradient(0, 0, 0.3, 0.3, 1.0, true, CycleMethod.NO_CYCLE,
+                        new Stop(0, Color.color(1, 1, 1, 0.18)),
+                        new Stop(1, Color.color(1, 1, 1, 0.0))));
+        innerGlow.setOpacity(0.65);
+
+        Group rivets = buildRivetRing(18, Main.WHEEL_RADIUS + 4);
+
+        rings.getChildren().addAll(baseShadow, outerRim, accentRing, rivets, innerGlow);
+        wheelGroup.getChildren().add(rings);
     }
     private Arc buildSector(double start,double extent,Color base,boolean loser){
         Arc arc = new Arc(0,0, Main.WHEEL_RADIUS, Main.WHEEL_RADIUS, start, extent);
         arc.setType(ArcType.ROUND);
 
         Paint p = loser
-                ? Color.rgb(40,40,40)
+                ? new LinearGradient(
+                        0, 0, 1, 1, true, CycleMethod.NO_CYCLE,
+                        new Stop(0, Color.rgb(70, 70, 70)),
+                        new Stop(1, Color.rgb(25, 25, 25))
+                )
                 : new LinearGradient(0,0,1,1,true,CycleMethod.NO_CYCLE,
                 new Stop(0, base.brighter()),
                 new Stop(.45, base),
@@ -176,13 +209,38 @@ public class Roue {
         arc.setStrokeWidth(SECTOR_BORDER_W);
         return arc;
     }
-    private Circle buildHub(){
-        Circle c = new Circle(HUB_RADIUS,
-                new RadialGradient(0,0,.3,.3,1,true,CycleMethod.NO_CYCLE,
-                        new Stop(0, Theme.ACCENT_LIGHT), new Stop(1, Theme.ACCENT)));
-        c.setStroke(HUB_STROKE);
-        c.setStrokeWidth(HUB_STROKE_W);
-        return c;
+    private Node buildHub(){
+        Circle base = new Circle(HUB_RADIUS,
+                new RadialGradient(0,0,.25,.25,1,true,CycleMethod.NO_CYCLE,
+                        new Stop(0, Theme.ACCENT_LIGHT),
+                        new Stop(1, Theme.ACCENT.darker())));
+        base.setStroke(HUB_STROKE);
+        base.setStrokeWidth(HUB_STROKE_W);
+        base.setEffect(new DropShadow(18, Color.color(0, 0, 0, 0.55)));
+
+        Circle top = new Circle(HUB_RADIUS * 0.55,
+                new RadialGradient(0, 0, 0.2, 0.2, 1, true, CycleMethod.NO_CYCLE,
+                        new Stop(0, Color.color(1, 1, 1, 0.85)),
+                        new Stop(1, Color.color(1, 1, 1, 0.0))));
+        top.setMouseTransparent(true);
+
+        Circle ring = new Circle(HUB_RADIUS * 0.82, Color.TRANSPARENT);
+        ring.setStroke(Color.color(1, 1, 1, 0.4));
+        ring.setStrokeWidth(1.8);
+
+        Group hub = new Group(base, ring, top);
+        hub.setMouseTransparent(true);
+        return hub;
+    }
+
+    private Node buildGlossOverlay() {
+        Circle gloss = new Circle(Main.WHEEL_RADIUS - 10,
+                new LinearGradient(0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
+                        new Stop(0, Color.color(1, 1, 1, 0.35)),
+                        new Stop(0.55, Color.color(1, 1, 1, 0.05)),
+                        new Stop(1, Color.color(1, 1, 1, 0.0))));
+        gloss.setMouseTransparent(true);
+        return gloss;
     }
 
     private void buildSeatArrays(ObservableList<String> tickets,int losers){
@@ -209,5 +267,24 @@ public class Roue {
         root.setOnMouseDragged(e->{ root.setTranslateX(e.getSceneX()-dragX); root.setTranslateY(e.getSceneY()-dragY);} );
         root.setOnMouseReleased(e-> root.setCursor(Cursor.OPEN_HAND));
         root.setCursor(Cursor.OPEN_HAND);
+    }
+
+    private Group buildRivetRing(int count, double radius) {
+        Group rivets = new Group();
+        for (int i = 0; i < count; i++) {
+            double angle = Math.toRadians((360.0 / count) * i);
+            double x = Math.cos(angle) * radius;
+            double y = Math.sin(angle) * radius;
+            Circle rivet = new Circle(x, y, 3.5,
+                    new RadialGradient(0, 0, 0.3, 0.3, 1, true, CycleMethod.NO_CYCLE,
+                            new Stop(0, Color.color(1, 1, 1, 0.9)),
+                            new Stop(1, Color.color(0.7, 0.7, 0.7, 0.4))));
+            rivet.setStroke(Color.color(0, 0, 0, 0.6));
+            rivet.setStrokeWidth(0.8);
+            rivet.setMouseTransparent(true);
+            rivets.getChildren().add(rivet);
+        }
+        rivets.setMouseTransparent(true);
+        return rivets;
     }
 }

@@ -7,6 +7,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonBar;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.layout.*;
@@ -21,6 +22,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 public class Main extends Application {
@@ -233,15 +235,17 @@ public class Main extends Application {
             final int snapshotRoundId = roundIdRef[0];
 
             roue.setOnSpinFinished(winnerName -> {
+                final Map<String, Integer> donationsSnapshot = snapshotDonations();
+                final int bonusSnapshot = gains.getExtraKamas();
                 try {
                     if (winnerName != null) {
                         donationsLedger.appendPayout(snapshotRoundId, winnerName, roundPot);
                         finalizeRoundAndReset();
                         resultat.setMessage(winnerName + " remporte " + formatKamas(roundPot) + " k !");
-                        historique.logResult(winnerName, roundPot);
+                        historique.logResult(snapshotRoundId, winnerName, roundPot, roundPot, donationsSnapshot, bonusSnapshot);
                     } else {
                         resultat.setMessage("Perdu ! Pot conservé : " + formatKamas(roundPot) + " k");
-                        historique.logResult(null, 0);
+                        historique.logResult(snapshotRoundId, null, 0, roundPot, donationsSnapshot, bonusSnapshot);
                     }
                 } catch (IOException ex) {
                     resultat.setMessage("Erreur payout : " + ex.getMessage());
@@ -281,16 +285,6 @@ public class Main extends Application {
             }
         });
 
-        Button cleanButton = new Button("Nettoyer");
-        cleanButton.setOnAction(e -> {
-            Save.reset(users.getParticipants(), gains.getObjets());
-            gains.resetBonus();
-            currentRoundId = null;
-            lastSnapshotSignature = null;
-            roue.updateWheelDisplay(users.getParticipantNames());
-            resultat.setMessage("Nouvelle loterie prête");
-        });
-
         Button resetCarryButton = new Button("RAZ cagnotte cumulée");
         resetCarryButton.setOnAction(e -> {
             Alert confirm = new Alert(
@@ -318,23 +312,40 @@ public class Main extends Application {
 
         Button btnFin = new Button("Fin de la loterie");
         btnFin.setOnAction(e -> {
-            Integer rid = finalizeRoundAndReset();
-            try {
-                users.clearAll();
-                gains.getObjets().clear();
-                gains.resetBonus();
-                Save.save(users.getParticipants(), gains.getObjets(), gains.getExtraKamas());
-                gains.setCarryOver(donationsLedger.computeCarryOver());
-                roue.updateWheelDisplay(users.getParticipantNames());
-                currentRoundId = null;
-                lastSnapshotSignature = null;
-                String msg = "Loterie clôturée. "
-                        + (rid != null ? "Tour #" + rid + " enregistré. " : "")
-                        + "Cagnotte cumulée : " + formatKamas(gains.getCarryOver()) + " k.";
-                resultat.setMessage(msg);
-            } catch (IOException ex) {
-                resultat.setMessage("Erreur lors de la fermeture : " + ex.getMessage());
-                ex.printStackTrace();
+            ButtonType closeType = new ButtonType("Clôturer", ButtonBar.ButtonData.OK_DONE);
+            ButtonType resetType = new ButtonType("Réinitialiser", ButtonBar.ButtonData.APPLY);
+            Alert choice = new Alert(
+                    Alert.AlertType.CONFIRMATION,
+                    "Clôturer la loterie et enregistrer le tour courant, ou simplement repartir à zéro ?",
+                    closeType,
+                    resetType,
+                    ButtonType.CANCEL
+            );
+            choice.setHeaderText("Fin de la loterie");
+            choice.initOwner(primaryStage);
+
+            ButtonType decision = choice.showAndWait().orElse(ButtonType.CANCEL);
+            if (decision == closeType) {
+                Integer rid = finalizeRoundAndReset();
+                try {
+                    users.clearAll();
+                    gains.getObjets().clear();
+                    gains.resetBonus();
+                    Save.save(users.getParticipants(), gains.getObjets(), gains.getExtraKamas());
+                    gains.setCarryOver(donationsLedger.computeCarryOver());
+                    roue.updateWheelDisplay(users.getParticipantNames());
+                    currentRoundId = null;
+                    lastSnapshotSignature = null;
+                    String msg = "Loterie clôturée. "
+                            + (rid != null ? "Tour #" + rid + " enregistré. " : "")
+                            + "Cagnotte cumulée : " + formatKamas(gains.getCarryOver()) + " k.";
+                    resultat.setMessage(msg);
+                } catch (IOException ex) {
+                    resultat.setMessage("Erreur lors de la fermeture : " + ex.getMessage());
+                    ex.printStackTrace();
+                }
+            } else if (decision == resetType) {
+                resetLotteryState();
             }
         });
 
@@ -356,7 +367,6 @@ public class Main extends Application {
         Theme.styleButton(optionsButton);
         Theme.styleButton(resetButton);
         Theme.styleButton(saveButton);
-        Theme.styleButton(cleanButton);
         Theme.styleButton(resetCarryButton);
         Theme.styleButton(btnFin);
         Theme.styleButton(historyButton);
@@ -365,7 +375,7 @@ public class Main extends Application {
         HBox bottomBox = new HBox(30,
                 btnNouveauxPayants,
                 spinButton, optionsButton, resetButton,
-                saveButton, cleanButton, resetCarryButton, btnFin,
+                saveButton, resetCarryButton, btnFin,
                 fullScreenButton,
                 historyButton
         );
@@ -414,6 +424,29 @@ public class Main extends Application {
         } finally {
             wheelRefreshSuppressed = previous;
         }
+    }
+
+    private void resetLotteryState() {
+        Save.reset(users.getParticipants(), gains.getObjets());
+        gains.resetBonus();
+        currentRoundId = null;
+        lastSnapshotSignature = null;
+        roue.updateWheelDisplay(users.getParticipantNames());
+        resultat.setMessage("Nouvelle loterie prête");
+    }
+
+    private Map<String, Integer> snapshotDonations() {
+        return users.getParticipants().stream()
+                .filter(p -> p != null && p.getKamas() > 0)
+                .collect(Collectors.toMap(
+                        p -> {
+                            String name = p.getName();
+                            return (name == null || name.isBlank()) ? "?" : name;
+                        },
+                        p -> Math.max(0, p.getKamas()),
+                        Integer::sum,
+                        () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)
+                ));
     }
 
     private int ensureRoundSnapshot(String snapshotSignature) throws IOException {

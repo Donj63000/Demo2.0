@@ -29,11 +29,15 @@ public class OptionRoue extends Stage {
 
         // Champ pour le nombre de tickets perdants
         Label lblTickets = new Label("Nombre de tickets perdants :");
+        lblTickets.setTextFill(Theme.TEXT_DEFAULT);
         TextField txtTickets = new TextField(String.valueOf(losingTickets));
+        Theme.styleTextField(txtTickets);
 
         // Champ pour la durée de rotation
         Label lblDuration = new Label("Durée de rotation (secondes) :");
+        lblDuration.setTextFill(Theme.TEXT_DEFAULT);
         TextField txtDuration = new TextField(String.valueOf(spinDuration));
+        Theme.styleTextField(txtDuration);
 
         // Bouton pour enregistrer la valeur
         Button btnSave = new Button("Enregistrer");
@@ -48,7 +52,8 @@ public class OptionRoue extends Stage {
                 // Lecture de la durée de rotation
                 double dur = Double.parseDouble(txtDuration.getText().trim());
                 if (dur > 0) {
-                    spinDuration = dur;
+                    spinDuration = Math.max(1.0, dur);
+                    txtDuration.setText(String.valueOf(spinDuration));
                 }
 
                 // On ferme la fenêtre après sauvegarde
@@ -63,6 +68,7 @@ public class OptionRoue extends Stage {
         Theme.styleButton(btnSave);
 
         root.getChildren().addAll(lblTickets, txtTickets, lblDuration, txtDuration, btnSave);
+        Theme.styleDialogRoot(root);
 
         Scene scene = new Scene(root, 300, 160);
         setScene(scene);

@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
@@ -157,6 +158,23 @@ public final class DonationsLedger {
         return perRound.values().stream()
                 .map(RoundAccumulator::toRecord)
                 .collect(Collectors.toList());
+    }
+
+    public synchronized Optional<RoundRecord> findRoundRecord(int roundId) {
+        RoundAccumulator accumulator = null;
+        for (DonationEntry entry : loadAll()) {
+            if (entry.getRoundId() != roundId) {
+                continue;
+            }
+            if (accumulator == null) {
+                accumulator = new RoundAccumulator(roundId);
+            }
+            accumulator.touch(entry);
+        }
+        if (accumulator == null) {
+            return Optional.empty();
+        }
+        return Optional.of(accumulator.toRecord());
     }
 
     /**

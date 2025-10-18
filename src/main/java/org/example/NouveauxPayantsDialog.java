@@ -160,13 +160,17 @@ public final class NouveauxPayantsDialog extends Stage {
             tfKamas.clear();
         });
 
-        HBox addBar = new HBox(8, new Label("Ajouter :"), tfName, tfKamas, btnAdd);
+        Label lblAjouter = new Label("Ajouter :");
+        lblAjouter.setTextFill(Theme.TEXT_DEFAULT);
+
+        HBox addBar = new HBox(8, lblAjouter, tfName, tfKamas, btnAdd);
         addBar.setPadding(new Insets(0, 0, 6, 0));
         HBox.setHgrow(tfName, Priority.NEVER);
         HBox.setHgrow(tfKamas, Priority.NEVER);
 
         CheckBox cbRetirer = new CheckBox("Retirer les anciens de la liste qui n'ont pas payé ?");
         cbRetirer.setSelected(false);
+        cbRetirer.setTextFill(Theme.TEXT_DEFAULT);
 
         Button btnValider = new Button("Valider");
         Theme.styleButton(btnValider);
@@ -205,10 +209,16 @@ public final class NouveauxPayantsDialog extends Stage {
         Label description = new Label("Coche les joueurs qui ont payé, renseigne leur mise pour ce tour, "
                 + "et ajoute les nouveaux inscrits si nécessaire.");
         description.setWrapText(true);
+        description.setTextFill(Theme.TEXT_DEFAULT);
 
+        Label paneTitle = new Label("Sélection des payants");
+        paneTitle.setTextFill(Theme.TEXT_DEFAULT);
         TitledPane pane = new TitledPane("Sélection des payants", table);
         pane.setExpanded(true);
         pane.setCollapsible(false);
+        pane.setText(null);
+        pane.setGraphic(paneTitle);
+        pane.setStyle("-fx-background-color: rgba(5, 20, 60, 0.45);");
 
         VBox root = new VBox(12,
                 description,
@@ -217,6 +227,7 @@ public final class NouveauxPayantsDialog extends Stage {
                 cbRetirer,
                 actions);
         root.setPadding(new Insets(12));
+        Theme.styleDialogRoot(root);
 
         setScene(new Scene(root, 720, 520));
     }

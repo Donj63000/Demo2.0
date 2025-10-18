@@ -56,13 +56,13 @@ public final class DonationsHistory extends Stage {
         ));
         Theme.styleCapsuleLabel(potLabel, "#4776e6", "#8e54e9");
 
-        VBox root = new VBox(12,
-                potLabel,
-                new TitledPane("Tours enregistrés", roundsTable),
-                new TitledPane("Détails du tour sélectionné", participantsTable),
-                new TitledPane("Journal brut (debug)", ledgerTable)
-        );
+        TitledPane roundsPane = createSection("Tours enregistrés", roundsTable);
+        TitledPane detailPane = createSection("Détails du tour sélectionné", participantsTable);
+        TitledPane rawPane = createSection("Journal brut (debug)", ledgerTable);
+
+        VBox root = new VBox(12, potLabel, roundsPane, detailPane, rawPane);
         root.setPadding(new Insets(12));
+        Theme.styleDialogRoot(root);
 
         Scene scene = new Scene(root, 820, 680);
         setScene(scene);
@@ -124,7 +124,9 @@ public final class DonationsHistory extends Stage {
                 formatAmount(cell.getValue().getValue())));
 
         table.getColumns().setAll(colPlayer, colAmount);
-        table.setPlaceholder(new Label("Sélectionne un tour pour voir le détail des mises."));
+        Label placeholder = new Label("Sélectionne un tour pour voir le détail des mises.");
+        placeholder.setTextFill(Theme.TEXT_DEFAULT);
+        table.setPlaceholder(placeholder);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
         return table;
     }
@@ -158,6 +160,9 @@ public final class DonationsHistory extends Stage {
         table.getColumns().setAll(colDate, colRound, colType, colPlayer, colAmount);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
         table.setPrefHeight(200);
+        Label placeholder = new Label("Aucune entrée enregistrée.");
+        placeholder.setTextFill(Theme.TEXT_DEFAULT);
+        table.setPlaceholder(placeholder);
         return table;
     }
 
@@ -177,5 +182,18 @@ public final class DonationsHistory extends Stage {
 
     private static String formatAmount(int amount) {
         return String.format("%,d", amount).replace(',', ' ');
+    }
+
+    private static TitledPane createSection(String title, javafx.scene.Node content) {
+        Label header = new Label(title);
+        header.setTextFill(Theme.TEXT_DEFAULT);
+        header.setStyle("-fx-font-weight: bold;");
+        TitledPane pane = new TitledPane();
+        pane.setGraphic(header);
+        pane.setContent(content);
+        pane.setText(null);
+        pane.setStyle("-fx-background-color: rgba(5, 20, 60, 0.45);");
+        pane.setExpanded(true);
+        return pane;
     }
 }

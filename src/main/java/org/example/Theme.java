@@ -31,20 +31,56 @@ public class Theme {
     }
 
     public static void styleButton(Button b) {
+        String baseGradient = "linear-gradient(to bottom, " + toWebColor(ACCENT_LIGHT) + " 0%, " + toWebColor(ACCENT) + " 100%)";
         String normal =
-                "-fx-background-radius: 10;" +
-                        "-fx-background-color: linear-gradient(" + toWebColor(ACCENT) + " 0%, " + toWebColor(ACCENT_LIGHT) + " 100%);" +
-                        "-fx-text-fill: white;" +
+                "-fx-background-color: " + baseGradient + ";" +
+                        "-fx-background-radius: 18;" +
+                        "-fx-border-radius: 18;" +
+                        "-fx-border-color: rgba(255,255,255,0.28);" +
+                        "-fx-border-width: 1.4;" +
+                        "-fx-text-fill: linear-gradient(to bottom, rgba(255,255,255,0.95), rgba(235,235,235,0.85));" +
                         "-fx-font-weight: bold;" +
-                        "-fx-padding: 10 24;" +
-                        "-fx-effect: dropshadow(one-pass-box, rgba(0,0,0,0.45), 6, 0, 0, 2);";
-        String hover   = "-fx-background-color: linear-gradient(" + toWebColor(ACCENT_LIGHT) + " 0%, " + toWebColor(ACCENT) + " 100%);";
-        String pressed = "-fx-background-color: " + toWebColor(ACCENT.darker()) + ";";
+                        "-fx-font-size: 14px;" +
+                        "-fx-padding: 11 28;" +
+                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 14, 0.25, 0, 6);";
+        String hover =
+                "-fx-background-color: linear-gradient(to bottom, " + toWebColor(ACCENT_LIGHT.brighter()) + " 0%, " + toWebColor(ACCENT.brighter()) + " 100%);" +
+                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.65), 18, 0.32, 0, 8);";
+        String pressed =
+                "-fx-background-color: linear-gradient(to bottom, " + toWebColor(ACCENT.darker()) + " 0%, " + toWebColor(ACCENT.darker().darker()) + " 100%);" +
+                        "-fx-padding: 12 28 10 28;" +
+                        "-fx-effect: innershadow(two-pass-box, rgba(0,0,0,0.45), 8, 0.3, 0, 2);";
+        String focus =
+                "-fx-border-color: rgba(255,255,255,0.6);" +
+                        "-fx-border-width: 1.8;";
+
         b.setStyle(normal);
         b.setCursor(Cursor.HAND);
         b.setOnMouseEntered(e -> b.setStyle(normal + hover));
-        b.setOnMouseExited (e -> b.setStyle(normal));
-        b.pressedProperty().addListener((o, ov, nv) -> b.setStyle(nv ? normal + pressed : normal));
+        b.setOnMouseExited(e -> {
+            b.setStyle(normal);
+            if (b.isFocused()) {
+                b.setStyle(normal + focus);
+            }
+        });
+        b.focusedProperty().addListener((obs, oldV, newV) -> {
+            if (newV) {
+                b.setStyle(normal + focus);
+            } else {
+                b.setStyle(normal);
+            }
+        });
+        b.pressedProperty().addListener((o, ov, nv) -> {
+            if (nv) {
+                b.setStyle(normal + pressed);
+            } else if (b.isHover()) {
+                b.setStyle(normal + hover);
+            } else if (b.isFocused()) {
+                b.setStyle(normal + focus);
+            } else {
+                b.setStyle(normal);
+            }
+        });
     }
 
     public static void styleListView(ListView<?> lv) {
@@ -103,5 +139,29 @@ public class Theme {
         LinearGradient gradient = new LinearGradient(0, 0, 1, 0, true, CycleMethod.NO_CYCLE, new Stop(0, Color.web(startColor)), new Stop(1, Color.web(endColor)));
         label.setBackground(new Background(new BackgroundFill(gradient, new CornerRadii(18), Insets.EMPTY)));
         label.setEffect(new DropShadow(10, Color.rgb(0, 0, 0, 0.35)));
+    }
+
+    public static void styleDialogRoot(Region root) {
+        if (root == null) {
+            return;
+        }
+        LinearGradient gradient = new LinearGradient(
+                0, 0, 1, 1, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Color.web("#0a1f44")),
+                new Stop(1, Color.web("#1565c0"))
+        );
+        root.setBackground(new Background(
+                new BackgroundFill(gradient, new CornerRadii(14), Insets.EMPTY)
+        ));
+        root.setBorder(new Border(new BorderStroke(
+                Color.web("#5fa8ff"),
+                BorderStrokeStyle.SOLID,
+                new CornerRadii(14),
+                new BorderWidths(1)
+        )));
+        if (root.getPadding() == null || root.getPadding().equals(Insets.EMPTY)) {
+            root.setPadding(new Insets(12));
+        }
+        root.setEffect(new DropShadow(18, Color.rgb(0, 0, 0, 0.3)));
     }
 }
