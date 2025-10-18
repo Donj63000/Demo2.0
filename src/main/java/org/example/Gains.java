@@ -73,6 +73,14 @@ public class Gains {
         Theme.styleButton(btnRemoveKamas);
         btnRemoveKamas.setOnAction(e -> applyBonusDelta(false));
 
+        Button btnResetBonus = new Button("Réinitialiser cagnotte");
+        Theme.styleButton(btnResetBonus);
+        btnResetBonus.setTooltip(new Tooltip("Met le bonus à 0 ; les mises des joueurs restent inchangées"));
+        btnResetBonus.disableProperty().bind(extraKamas.isEqualTo(0));
+        btnResetBonus.setOnAction(e -> resetBonusWithConfirmation());
+
+        HBox bonusButtons = new HBox(10, btnAddKamas, btnRemoveKamas, btnResetBonus);
+
         /* ========== 2) OBJETS ========== */
         listView = new ListView<>(objets);
         listView.setPrefSize(160, 300);
@@ -141,7 +149,7 @@ public class Gains {
 
         VBox vbKamas = new VBox(6,
                 txtExtra,
-                new HBox(10, btnAddKamas, btnRemoveKamas)
+                bonusButtons
         );
 
         root = new VBox(10,
@@ -195,9 +203,12 @@ public class Gains {
     }
 
     public void resetBonus() {
-        extraKamas.set(0);
-        txtExtra.setText("0");
-        recomputeTotal();
+        if (extraKamas.get() != 0) {
+            extraKamas.set(0);
+        } else {
+            recomputeTotal();
+        }
+        txtExtra.clear();
     }
 
     public void setCarryOver(int value) {
@@ -257,6 +268,25 @@ public class Gains {
         int bonus = Math.max(0, extraKamas.get());
         int co = Math.max(0, carryOver.get());
         totalKamas.set(co + sumPlayers + bonus);
+    }
+
+    private void resetBonusWithConfirmation() {
+        if (extraKamas.get() == 0) {
+            txtExtra.clear();
+            return;
+        }
+        Alert confirm = new Alert(
+                Alert.AlertType.CONFIRMATION,
+                "Remettre le bonus manuel à 0 ?\n"
+                        + "Les mises des joueurs et le report (carry-over) resteront inchangés.",
+                ButtonType.YES,
+                ButtonType.NO
+        );
+        confirm.setHeaderText("Réinitialiser la cagnotte (bonus)");
+        if (confirm.showAndWait().orElse(ButtonType.NO) != ButtonType.YES) {
+            return;
+        }
+        resetBonus();
     }
 
     private static void showWarn(String msg) {

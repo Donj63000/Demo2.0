@@ -24,6 +24,7 @@ public class Users {
     private final VBox                        root         = new VBox(10);
 
     private static final double GOLDEN_ANGLE = 137.50776405003785;
+    private static final int DEFAULT_INSCRIPTION_K = 20_000;
 
     public Users(){
 
@@ -91,7 +92,9 @@ public class Users {
 
         /* === Formulaire =============================================== */
         TextField tNom   = new TextField(); tNom.setPromptText("Pseudo");  Theme.styleTextField(tNom);
-        TextField tKamas = new TextField(); tKamas.setPromptText("Kamas"); Theme.styleTextField(tKamas);
+        TextField tKamas = new TextField();
+        tKamas.setPromptText(Kamas.formatFr(DEFAULT_INSCRIPTION_K) + " (par défaut)");
+        Theme.styleTextField(tKamas);
         TextField tDon   = new TextField(); tDon.setPromptText("Don");    Theme.styleTextField(tDon);
 
         tKamas.setTextFormatter(new TextFormatter<>(change -> {
@@ -105,7 +108,10 @@ public class Users {
         add.setOnAction(e -> {
             String n = tNom.getText().trim();
             if(!n.isEmpty()){
-                int k = Kamas.parseFlexible(tKamas.getText(), 0);
+                String rawKamas = tKamas.getText();
+                int k = (rawKamas == null || rawKamas.trim().isEmpty())
+                        ? DEFAULT_INSCRIPTION_K
+                        : Kamas.parseFlexible(rawKamas, 0);
                 participants.add(new Participant(n,k,tDon.getText().trim()));
                 tNom.clear(); tKamas.clear(); tDon.clear();
             }
