@@ -104,4 +104,28 @@ public class Theme {
         label.setBackground(new Background(new BackgroundFill(gradient, new CornerRadii(18), Insets.EMPTY)));
         label.setEffect(new DropShadow(10, Color.rgb(0, 0, 0, 0.35)));
     }
+
+    public static void styleDialogRoot(Region root) {
+        if (root == null) {
+            return;
+        }
+        LinearGradient gradient = new LinearGradient(
+                0, 0, 1, 1, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Color.web("#0a1f44")),
+                new Stop(1, Color.web("#1565c0"))
+        );
+        root.setBackground(new Background(
+                new BackgroundFill(gradient, new CornerRadii(14), Insets.EMPTY)
+        ));
+        root.setBorder(new Border(new BorderStroke(
+                Color.web("#5fa8ff"),
+                BorderStrokeStyle.SOLID,
+                new CornerRadii(14),
+                new BorderWidths(1)
+        )));
+        if (root.getPadding() == null || root.getPadding().equals(Insets.EMPTY)) {
+            root.setPadding(new Insets(12));
+        }
+        root.setEffect(new DropShadow(18, Color.rgb(0, 0, 0, 0.3)));
+    }
 }

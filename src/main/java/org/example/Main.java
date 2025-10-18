@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 public class Main extends Application {
@@ -233,15 +234,17 @@ public class Main extends Application {
             final int snapshotRoundId = roundIdRef[0];
 
             roue.setOnSpinFinished(winnerName -> {
+                final Map<String, Integer> donationsSnapshot = snapshotDonations();
+                final int bonusSnapshot = gains.getExtraKamas();
                 try {
                     if (winnerName != null) {
                         donationsLedger.appendPayout(snapshotRoundId, winnerName, roundPot);
                         finalizeRoundAndReset();
                         resultat.setMessage(winnerName + " remporte " + formatKamas(roundPot) + " k !");
-                        historique.logResult(winnerName, roundPot);
+                        historique.logResult(snapshotRoundId, winnerName, roundPot, roundPot, donationsSnapshot, bonusSnapshot);
                     } else {
                         resultat.setMessage("Perdu ! Pot conservé : " + formatKamas(roundPot) + " k");
-                        historique.logResult(null, 0);
+                        historique.logResult(snapshotRoundId, null, 0, roundPot, donationsSnapshot, bonusSnapshot);
                     }
                 } catch (IOException ex) {
                     resultat.setMessage("Erreur payout : " + ex.getMessage());
@@ -414,6 +417,20 @@ public class Main extends Application {
         } finally {
             wheelRefreshSuppressed = previous;
         }
+    }
+
+    private Map<String, Integer> snapshotDonations() {
+        return users.getParticipants().stream()
+                .filter(p -> p != null && p.getKamas() > 0)
+                .collect(Collectors.toMap(
+                        p -> {
+                            String name = p.getName();
+                            return (name == null || name.isBlank()) ? "?" : name;
+                        },
+                        p -> Math.max(0, p.getKamas()),
+                        Integer::sum,
+                        () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER)
+                ));
     }
 
     private int ensureRoundSnapshot(String snapshotSignature) throws IOException {

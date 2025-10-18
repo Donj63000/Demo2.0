@@ -1,20 +1,38 @@
 package org.example;
 
+import javafx.animation.PauseTransition;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
+import javafx.scene.control.Tooltip;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.util.Duration;
+
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Fenêtre affichant l'historique des tirages.
@@ -22,10 +40,12 @@ import java.time.format.DateTimeFormatter;
  */
 public class Historique extends Stage {
 
-    private final ObservableList<String> lignes = FXCollections.observableArrayList();
-    private final ListView<String> listView;
+    private final ObservableList<HistoryEntry> entries = FXCollections.observableArrayList();
+    private final ListView<HistoryEntry> listView;
     private final Gains gains;
     private final DonationsLedger ledger;
+    private Tooltip activeTooltip;
+    private PauseTransition tooltipHideTimer;
     private static final Path FILE = Path.of("loterie-historique.txt");
     private static final DateTimeFormatter FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -35,15 +55,53 @@ public class Historique extends Stage {
         this.ledger = ledger;
         setTitle("Historique des tirages");
 
-        listView = new ListView<>(lignes);
+        listView = new ListView<>(entries);
         Theme.styleListView(listView);
+        listView.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(HistoryEntry item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                } else {
+                    setText(item.label());
+                    setTextFill(Theme.TEXT_DEFAULT);
+                }
+            }
+        });
+        listView.setOnMouseClicked(this::handleDoubleClick);
 
         Button btnSuppr = new Button("Supprimer");
         Theme.styleButton(btnSuppr);
         btnSuppr.setOnAction(e -> {
             int idx = listView.getSelectionModel().getSelectedIndex();
             if (idx >= 0) {
-                lignes.remove(idx);
+                entries.remove(idx);
+            }
+        });
+
+        Button btnReset = new Button("Reset historique");
+        Theme.styleButton(btnReset);
+        btnReset.setOnAction(e -> {
+            if (entries.isEmpty()) {
+                return;
+            }
+            Alert confirm = new Alert(
+                    Alert.AlertType.CONFIRMATION,
+                    "Remettre l'historique des tirages à zéro ?",
+                    ButtonType.YES,
+                    ButtonType.NO
+            );
+            confirm.setHeaderText("Confirmer la remise à zéro");
+            if (confirm.showAndWait().orElse(ButtonType.NO) != ButtonType.YES) {
+                return;
+            }
+            hideActiveTooltip();
+            entries.clear();
+            try {
+                Files.deleteIfExists(FILE);
+            } catch (IOException ex) {
+                System.err.println("Impossible de supprimer le fichier d'historique : " + ex.getMessage());
             }
         });
 
@@ -52,41 +110,44 @@ public class Historique extends Stage {
         btnDonations.setOnAction(e ->
                 new DonationsHistory(ledger, gains.totalKamasProperty()).show());
 
-        HBox actions = new HBox(10, btnSuppr, btnDonations);
+        HBox actions = new HBox(10, btnSuppr, btnReset, btnDonations);
 
         VBox root = new VBox(10, listView, actions);
         root.setPadding(new Insets(10));
-        Scene scene = new Scene(root, 400, 300);
+        Theme.styleDialogRoot(root);
+        Scene scene = new Scene(root, 420, 320);
         setScene(scene);
 
-        // Charge l'historique depuis le fichier s'il existe
         loadHistory();
 
-        // Sauvegarde automatique à chaque modification
-        lignes.addListener((ListChangeListener<String>) c -> saveHistory());
+        entries.addListener((ListChangeListener<HistoryEntry>) c -> saveHistory());
     }
 
     /** Ajoute une ligne dans l'historique pour le tirage indiqué. */
-    public void logResult(String pseudo, int payoutKamas) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(LocalDateTime.now().format(FORMATTER)).append(" - ");
-        if (pseudo != null) {
-            sb.append("Vainqueur : ").append(pseudo).append(" - Gains : ")
-                    .append(payoutKamas).append(" k");
-            if (!gains.getObjets().isEmpty()) {
-                sb.append(" + ").append(String.join(", ", gains.getObjets()));
-            }
-        } else {
-            sb.append("Perdu");
-        }
-        lignes.add(sb.toString());
+    public void logResult(int roundId,
+                          String pseudo,
+                          int payoutKamas,
+                          int roundPot,
+                          Map<String, Integer> donationsSnapshot,
+                          int bonusSnapshot) {
+        HistoryEntry entry = buildEntry(roundId, pseudo, payoutKamas, roundPot, donationsSnapshot, bonusSnapshot);
+        entries.add(entry);
+        listView.scrollTo(entry);
     }
 
     private void loadHistory() {
+        if (!Files.exists(FILE)) {
+            return;
+        }
         try {
-            if (Files.exists(FILE)) {
-                lignes.setAll(Files.readAllLines(FILE));
-            }
+            List<HistoryEntry> loaded = Files.readAllLines(FILE, StandardCharsets.UTF_8)
+                    .stream()
+                    .map(String::trim)
+                    .filter(line -> !line.isEmpty())
+                    .map(this::deserializeEntry)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            entries.setAll(loaded);
         } catch (IOException ex) {
             System.err.println("Impossible de relire l'historique : " + ex.getMessage());
         }
@@ -94,9 +155,258 @@ public class Historique extends Stage {
 
     private void saveHistory() {
         try {
-            Files.write(FILE, lignes);
+            List<String> serialized = entries.stream()
+                    .map(HistoryEntry::serialize)
+                    .collect(Collectors.toList());
+            Files.write(FILE, serialized, StandardCharsets.UTF_8);
         } catch (IOException ex) {
             System.err.println("Impossible de sauvegarder l'historique : " + ex.getMessage());
+        }
+    }
+
+    private void handleDoubleClick(MouseEvent event) {
+        if (event.getButton() != MouseButton.PRIMARY || event.getClickCount() != 2) {
+            return;
+        }
+        HistoryEntry entry = listView.getSelectionModel().getSelectedItem();
+        if (entry == null) {
+            return;
+        }
+        showDetailsTooltip(entry, event);
+    }
+
+    private void showDetailsTooltip(HistoryEntry entry, MouseEvent event) {
+        hideActiveTooltip();
+        HistoryEntry enriched = enrichEntryFromLedger(entry);
+        String message = enriched != null && enriched.hasDetails()
+                ? enriched.detailsText()
+                : "Aucun détail disponible pour ce tirage.";
+        activeTooltip = new Tooltip(message);
+        activeTooltip.setAutoHide(true);
+        activeTooltip.setWrapText(true);
+        activeTooltip.setPrefWidth(320);
+        activeTooltip.show(
+                listView.getScene().getWindow(),
+                event.getScreenX() + 12,
+                event.getScreenY() + 12
+        );
+        if (tooltipHideTimer != null) {
+            tooltipHideTimer.stop();
+        }
+        tooltipHideTimer = new PauseTransition(Duration.seconds(5));
+        tooltipHideTimer.setOnFinished(e -> {
+            hideActiveTooltip();
+        });
+        tooltipHideTimer.playFromStart();
+    }
+
+    private void hideActiveTooltip() {
+        if (tooltipHideTimer != null) {
+            tooltipHideTimer.stop();
+            tooltipHideTimer = null;
+        }
+        if (activeTooltip != null) {
+            activeTooltip.hide();
+            activeTooltip = null;
+        }
+    }
+
+    private HistoryEntry enrichEntryFromLedger(HistoryEntry entry) {
+        if (entry == null || entry.hasDetails() || entry.roundId() == null) {
+            return entry;
+        }
+        Optional<DonationsLedger.RoundRecord> record = ledger.findRoundRecord(entry.roundId());
+        if (record.isEmpty()) {
+            return entry;
+        }
+        HistoryEntry enriched = fromRecord(entry.label(), record.get());
+        int index = entries.indexOf(entry);
+        if (index >= 0) {
+            entries.set(index, enriched);
+            listView.getSelectionModel().select(index);
+        }
+        return enriched;
+    }
+
+    private HistoryEntry buildEntry(int roundId,
+                                    String pseudo,
+                                    int payoutKamas,
+                                    int roundPot,
+                                    Map<String, Integer> donationsSnapshot,
+                                    int bonusSnapshot) {
+        Optional<DonationsLedger.RoundRecord> record = ledger.findRoundRecord(roundId);
+        if (record.isPresent()) {
+            return fromRecord(null, record.get());
+        }
+        Map<String, Integer> donations = orderDonations(donationsSnapshot);
+        int bonus = Math.max(0, bonusSnapshot);
+        int donationsTotal = donations.values().stream().mapToInt(Integer::intValue).sum();
+        int payout = Math.max(0, payoutKamas);
+        int inferredPot = Math.max(0, roundPot);
+        if (inferredPot == 0) {
+            inferredPot = Math.max(payout, donationsTotal + bonus);
+        }
+        LocalDateTime timestamp = LocalDateTime.now();
+        String winner = pseudo;
+        String label = buildLabel(timestamp, winner, payout);
+        return new HistoryEntry(label, roundId, donations, bonus, winner, payout, inferredPot, timestamp);
+    }
+
+    private HistoryEntry fromRecord(String labelOverride, DonationsLedger.RoundRecord record) {
+        String label = (labelOverride != null && !labelOverride.isBlank())
+                ? labelOverride
+                : buildLabel(record.timestamp(), record.winner(), record.payout());
+        return new HistoryEntry(
+                label,
+                record.roundId(),
+                orderDonations(record.donations()),
+                record.bonus(),
+                record.winner(),
+                record.payout(),
+                record.pot(),
+                record.timestamp()
+        );
+    }
+
+    private HistoryEntry deserializeEntry(String line) {
+        Integer roundId = null;
+        String label = line;
+        int sep = line.indexOf('|');
+        if (sep > 0) {
+            String prefix = line.substring(0, sep);
+            try {
+                roundId = Integer.parseInt(prefix);
+                label = line.substring(sep + 1);
+            } catch (NumberFormatException ignored) {
+                roundId = null;
+                label = line;
+            }
+        }
+        return createEntry(roundId, label);
+    }
+
+    private HistoryEntry createEntry(Integer roundId, String label) {
+        if (roundId == null) {
+            return HistoryEntry.withoutMetadata(label);
+        }
+        Optional<DonationsLedger.RoundRecord> record = ledger.findRoundRecord(roundId);
+        if (record.isEmpty()) {
+            return new HistoryEntry(label, roundId, Map.of(), 0, null, 0, 0, null);
+        }
+        return fromRecord(label, record.get());
+    }
+
+    private Map<String, Integer> orderDonations(Map<String, Integer> donations) {
+        if (donations == null || donations.isEmpty()) {
+            return Map.of();
+        }
+        return donations.entrySet().stream()
+                .sorted(
+                        Map.Entry.<String, Integer>comparingByValue().reversed()
+                                .thenComparing(Map.Entry::getKey, String.CASE_INSENSITIVE_ORDER)
+                )
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (a, b) -> b,
+                        LinkedHashMap::new
+                ));
+    }
+
+    private String buildLabel(LocalDateTime timestamp, String winner, int payout) {
+        LocalDateTime ts = timestamp != null ? timestamp : LocalDateTime.now();
+        String prefix = ts.format(FORMATTER);
+        if (winner != null && !winner.isBlank()) {
+            return prefix + " - Vainqueur : " + winner + " - Gains : "
+                    + formatAmount(Math.max(0, payout)) + " k";
+        }
+        return prefix + " - Perdu";
+    }
+
+    private static String formatAmount(int amount) {
+        return String.format("%,d", Math.max(0, amount)).replace(',', ' ');
+    }
+
+    private static final class HistoryEntry {
+        private final String label;
+        private final Integer roundId;
+        private final Map<String, Integer> donations;
+        private final int bonus;
+        private final String winner;
+        private final int payout;
+        private final int pot;
+        private final LocalDateTime timestamp;
+
+        private HistoryEntry(String label,
+                             Integer roundId,
+                             Map<String, Integer> donations,
+                             int bonus,
+                             String winner,
+                             int payout,
+                             int pot,
+                             LocalDateTime timestamp) {
+            this.label = label;
+            this.roundId = roundId;
+            this.donations = Collections.unmodifiableMap(new LinkedHashMap<>(donations));
+            this.bonus = Math.max(0, bonus);
+            this.winner = winner;
+            this.payout = Math.max(0, payout);
+            this.pot = Math.max(0, pot);
+            this.timestamp = timestamp;
+        }
+
+        static HistoryEntry withoutMetadata(String label) {
+            return new HistoryEntry(label, null, Map.of(), 0, null, 0, 0, null);
+        }
+
+        String label() {
+            return label;
+        }
+
+        Integer roundId() {
+            return roundId;
+        }
+
+        boolean hasDetails() {
+            return roundId != null
+                    && (!donations.isEmpty() || bonus > 0 || (winner != null && !winner.isBlank()) || pot > 0);
+        }
+
+        String detailsText() {
+            List<String> lines = new ArrayList<>();
+            if (timestamp != null) {
+                lines.add("Tirage du " + timestamp.format(FORMATTER));
+            }
+            if (roundId != null) {
+                lines.add("Tour #" + roundId);
+            }
+            if (!donations.isEmpty()) {
+                lines.add("Participants :");
+                donations.forEach((name, amount) ->
+                        lines.add(" - " + name + " : " + formatAmount(amount) + " k"));
+            } else {
+                lines.add("Participants : aucun");
+            }
+            if (bonus > 0) {
+                lines.add("Bonus : " + formatAmount(bonus) + " k");
+            }
+            if (winner != null && !winner.isBlank()) {
+                int displayedPayout = payout > 0 ? payout : pot;
+                lines.add("Gagnant : " + winner + " (" + formatAmount(displayedPayout) + " k)");
+            } else {
+                lines.add("Gagnant : aucun");
+            }
+            if (pot > 0) {
+                lines.add("Pot total : " + formatAmount(pot) + " k");
+            }
+            return String.join("\n", lines);
+        }
+
+        String serialize() {
+            if (roundId == null) {
+                return label;
+            }
+            return roundId + "|" + label;
         }
     }
 }
