@@ -2,18 +2,21 @@ package org.example;
 
 import javafx.animation.*;
 import javafx.collections.ObservableList;
-import javafx.scene.effect.DropShadow;
 import javafx.geometry.Pos;
 import javafx.scene.CacheHint;
 import javafx.scene.Cursor;
 import javafx.scene.Group;
 import javafx.scene.Node;
+import javafx.scene.effect.DropShadow;
 import javafx.scene.effect.Glow;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.*;
 import javafx.scene.shape.Arc;
 import javafx.scene.shape.ArcType;
 import javafx.scene.shape.Circle;
+import javafx.scene.media.Media;
+import javafx.scene.media.MediaException;
+import javafx.scene.media.MediaPlayer;
 import javafx.util.Duration;
 
 import java.util.ArrayList;
@@ -41,6 +44,8 @@ public class Roue {
     private final RotateTransition rot;
     private final Resultat  resultat;
     private final List<Arc> arcs = new ArrayList<>();
+    private MediaPlayer spinPlayer;
+    private boolean spinSoundFailed;
 
     private String[] seatNames;
     private Color[]  seatColors;
@@ -75,6 +80,7 @@ public class Roue {
 
         wheelGroup.setRotate(0);
         rot.stop();
+        stopSpinSound();
         wheelGroup.getChildren().clear();
         arcs.clear();
 
@@ -112,11 +118,13 @@ public class Roue {
         rot.setToAngle(wheelGroup.getRotate() + end);
         rot.setInterpolator(Interpolator.EASE_OUT);
         rot.setOnFinished(e -> {
+            stopSpinSound();
             String pseudo = seatNames[idx];
             resultat.setMessage(pseudo!=null ? pseudo+" a gagné !" : "Perdu !");
             if(spinCallback!=null) spinCallback.accept(pseudo);
             highlightWinner(idx);
         });
+        startSpinSound();
         rot.play();
     }
 
@@ -145,6 +153,41 @@ public class Roue {
     private void stopHighlight(){
         if(rainbowLoop!=null) rainbowLoop.stop();
         arcs.forEach(x->{ x.setEffect(null); x.setStroke(SECTOR_BORDER); x.setStrokeWidth(SECTOR_BORDER_W); });
+    }
+
+    private void startSpinSound() {
+        if (spinSoundFailed) {
+            return;
+        }
+        if (spinPlayer == null) {
+            var resource = Roue.class.getResource("/song-loto.mp3");
+            if (resource == null) {
+                System.err.println("Audio introuvable : /song-loto.mp3");
+                spinSoundFailed = true;
+                return;
+            }
+            try {
+                spinPlayer = new MediaPlayer(new Media(resource.toExternalForm()));
+                spinPlayer.setCycleCount(MediaPlayer.INDEFINITE);
+                spinPlayer.setOnError(() -> {
+                    System.err.println("Erreur audio (roue) : " + spinPlayer.getError());
+                    spinSoundFailed = true;
+                });
+            } catch (MediaException ex) {
+                System.err.println("Impossible de charger l'audio de la roue : " + ex.getMessage());
+                spinSoundFailed = true;
+                return;
+            }
+        }
+        spinPlayer.stop();
+        spinPlayer.seek(Duration.ZERO);
+        spinPlayer.play();
+    }
+
+    private void stopSpinSound() {
+        if (spinPlayer != null) {
+            spinPlayer.stop();
+        }
     }
 
     private void addDecorRings(){

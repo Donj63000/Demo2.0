@@ -1,4 +1,8 @@
 #Participants
+A;60000;
+B;60000;
+V;40000;
+D;40000;
 #Objets
 #Bonus
 0

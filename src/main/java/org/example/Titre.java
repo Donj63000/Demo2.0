@@ -36,8 +36,14 @@ public class Titre {
         root.setPadding(new Insets(6, 0, 6, 20));
         root.setMaxWidth(StackPane.USE_PREF_SIZE);
         shimmer = new Rectangle();
-        shimmer.widthProperty().bind(Bindings.createDoubleBinding(() -> title.getLayoutBounds().getWidth() * 1.2, title.layoutBoundsProperty()));
-        shimmer.heightProperty().bind(Bindings.createDoubleBinding(() -> title.getLayoutBounds().getHeight() * 2, title.layoutBoundsProperty()));
+        shimmer.widthProperty().bind(Bindings.createDoubleBinding(
+                () -> title.getLayoutBounds().getWidth() * 1.2,
+                title.layoutBoundsProperty()
+        ));
+        shimmer.heightProperty().bind(Bindings.createDoubleBinding(
+                () -> title.getLayoutBounds().getHeight() * 2,
+                title.layoutBoundsProperty()
+        ));
         shimmer.setRotate(20);
         shimmer.setFill(makeShimmerPaint(0));
         root.getChildren().add(shimmer);
@@ -63,17 +69,28 @@ public class Titre {
 
     private void startShimmer() {
         TranslateTransition slide = new TranslateTransition(Duration.seconds(5), shimmer);
-        slide.fromXProperty().bind(Bindings.createDoubleBinding(() -> -title.getLayoutBounds().getWidth(), title.layoutBoundsProperty()));
-        slide.toXProperty().bind(Bindings.createDoubleBinding(() -> title.getLayoutBounds().getWidth(), title.layoutBoundsProperty()));
+        slide.fromXProperty().bind(Bindings.createDoubleBinding(
+                () -> -title.getLayoutBounds().getWidth(),
+                title.layoutBoundsProperty()
+        ));
+        slide.toXProperty().bind(Bindings.createDoubleBinding(
+                () -> title.getLayoutBounds().getWidth(),
+                title.layoutBoundsProperty()
+        ));
         slide.setCycleCount(TranslateTransition.INDEFINITE);
         slide.setInterpolator(Interpolator.LINEAR);
         slide.play();
+
         ScaleTransition pulse = new ScaleTransition(Duration.seconds(5), shimmer);
         pulse.setFromX(1);
         pulse.setToX(1.3);
         pulse.setCycleCount(ScaleTransition.INDEFINITE);
         pulse.setAutoReverse(true);
         pulse.play();
-        shimmer.fillProperty().bind(Bindings.createObjectBinding(() -> makeShimmerPaint(0.30), shimmer.translateXProperty()));
+
+        shimmer.fillProperty().bind(Bindings.createObjectBinding(
+                () -> makeShimmerPaint(0.30),
+                shimmer.translateXProperty()
+        ));
     }
 }

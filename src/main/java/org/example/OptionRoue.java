@@ -17,8 +17,8 @@ public class OptionRoue extends Stage {
     // Variable statique : nombre de tickets perdants (100 par défaut).
     private static int losingTickets = 100;
 
-    // Nouvelle variable statique : durée de rotation (3.0 s par défaut)
-    private static double spinDuration = 3.0;
+    // Nouvelle variable statique : durée de rotation (50.0 s par défaut)
+    private static double spinDuration = 50.0;
 
     public OptionRoue() {
         setTitle("Options de la roue");

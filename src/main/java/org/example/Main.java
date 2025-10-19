@@ -8,6 +8,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.layout.*;
 import javafx.scene.text.Font;
@@ -16,12 +17,12 @@ import javafx.stage.Stage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class Main extends Application {
@@ -72,20 +73,23 @@ public class Main extends Application {
 
         // === 2) Participants (gauche) ===
         users = new Users();
-        VBox leftBox = new VBox(10, users.getRootPane());
-        // On supprime le padding-top
-        leftBox.setPadding(new Insets(0, 10, 10, 20));
-        leftBox.setAlignment(Pos.TOP_CENTER);
+        donationsLedger = new DonationsLedger();
+        gains = new Gains(users.getParticipants());
+        historique = new Historique(gains, donationsLedger);
+        gains.setCarryOver(donationsLedger.computeCarryOver());
+        Button historyButton = new Button("Historique");
+        historyButton.setOnAction(e -> historique.show());
+        Theme.styleButton(historyButton);
+
+        VBox leftBox = new VBox(10, historyButton, users.getRootPane());
+        leftBox.setPadding(new Insets(10, 10, 10, 20));
+        leftBox.setAlignment(Pos.TOP_LEFT);
 
         // Agrandit la zone : 420 px large × 820 px haut
         leftBox.setPrefSize(420, 820);
         root.setLeft(leftBox);
 
         // === 3) Gains (droite) ===
-        donationsLedger = new DonationsLedger();
-        gains = new Gains(users.getParticipants());
-        historique = new Historique(gains, donationsLedger);
-        gains.setCarryOver(donationsLedger.computeCarryOver());
         VBox rightBox = new VBox(10, gains.getRootPane());
         // Padding-top = 0 => ils sont “collés” sous le titre
         rightBox.setPadding(new Insets(0, 20, 10, 10));
@@ -157,46 +161,6 @@ public class Main extends Application {
         );
 
         // === 5) Boutons en bas ===
-        Button btnNouveauxPayants = new Button("Nouveaux payants");
-        btnNouveauxPayants.setOnAction(e -> {
-            NouveauxPayantsDialog dialog = new NouveauxPayantsDialog(users.getParticipants(), result -> {
-                Set<String> namesPaid = new HashSet<>();
-                for (NouveauxPayantsDialog.Payant payant : result.payants) {
-                    namesPaid.add(payant.name);
-                    Participant existing = users.findByNameIgnoreCase(payant.name);
-                    if (existing == null) {
-                        Participant participant = new Participant(payant.name, payant.kamas, "-");
-                        participant.setStake(Math.max(0, payant.kamas));
-                        participant.setWillReplay(true);
-                        participant.setPaid(true);
-                        users.getParticipants().add(participant);
-                    } else {
-                        existing.setKamas(Math.max(0, existing.getKamas() + payant.kamas));
-                        existing.setStake(Math.max(0, payant.kamas));
-                        existing.setWillReplay(true);
-                        existing.setPaid(true);
-                    }
-                }
-
-                if (result.retirerAnciensNonPayants) {
-                    users.removeParticipantsNotIn(namesPaid);
-                }
-
-                if (!result.payants.isEmpty()) {
-                    currentRoundId = (currentRoundId == null)
-                            ? donationsLedger.getNextRoundId()
-                            : currentRoundId;
-                    resultat.setMessage("Payants mis à jour pour le tour #" + currentRoundId);
-                } else {
-                    resultat.setMessage("Aucun payant sélectionné.");
-                }
-
-                roue.updateWheelDisplay(users.getParticipantNames());
-            });
-            dialog.initOwner(primaryStage);
-            dialog.showAndWait();
-        });
-
         Button spinButton = new Button("Lancer la roue !");
         spinButton.setFont(Font.font("Arial", 16));
         spinButton.setOnAction(e -> {
@@ -206,6 +170,7 @@ public class Main extends Application {
             spinButton.setDisable(true);
 
             var tickets = users.getParticipantNames();
+            List<String> participantSnapshot = new ArrayList<>(tickets);
 
             if (tickets.isEmpty()) {
                 resultat.setMessage("Aucun participant validé (Rejoue ? + Payé ?).");
@@ -239,10 +204,10 @@ public class Main extends Application {
                         donationsLedger.appendPayout(snapshotRoundId, winnerName, roundPot);
                         finalizeRoundAndReset();
                         resultat.setMessage(winnerName + " remporte " + formatKamas(roundPot) + " k !");
-                        historique.logResult(winnerName, roundPot);
+                        historique.logResult(winnerName, roundPot, participantSnapshot);
                     } else {
                         resultat.setMessage("Perdu ! Pot conservé : " + formatKamas(roundPot) + " k");
-                        historique.logResult(null, 0);
+                        historique.logResult(null, roundPot, participantSnapshot);
                     }
                 } catch (IOException ex) {
                     resultat.setMessage("Erreur payout : " + ex.getMessage());
@@ -284,64 +249,38 @@ public class Main extends Application {
 
         Button cleanButton = new Button("Nettoyer");
         cleanButton.setOnAction(e -> {
-            Save.reset(users.getParticipants(), gains.getObjets());
-            gains.resetBonus();
-            currentRoundId = null;
-            lastSnapshotSignature = null;
-            roue.updateWheelDisplay(users.getParticipantNames());
-            resultat.setMessage("Nouvelle loterie prête");
-        });
-
-        Button resetCarryButton = new Button("RAZ cagnotte cumulée");
-        resetCarryButton.setOnAction(e -> {
+            ButtonType confirmType = new ButtonType("Oui, nettoyer", ButtonBar.ButtonData.OK_DONE);
+            ButtonType cancelType = new ButtonType("Annuler", ButtonBar.ButtonData.CANCEL_CLOSE);
             Alert confirm = new Alert(
                     Alert.AlertType.CONFIRMATION,
-                    "Remettre la cagnotte cumulée (report) à 0 ?\n"
-                            + "Cette action réinitialise le fichier loterie-dons.csv.",
-                    ButtonType.YES,
-                    ButtonType.NO
+                    "T'es sûr de vouloir tout clean ? La roulette repartira de zéro et toutes les données seront effacées.",
+                    confirmType,
+                    cancelType
             );
-            confirm.setHeaderText("Réinitialiser la cagnotte cumulée");
-            if (confirm.showAndWait().orElse(ButtonType.NO) != ButtonType.YES) {
+            confirm.setTitle("Confirmer le nettoyage complet");
+            confirm.setHeaderText("Nettoyer la loterie ?");
+            confirm.initOwner(primaryStage);
+            if (confirm.showAndWait().orElse(cancelType) != confirmType) {
                 return;
             }
+            Save.reset(users.getParticipants(), gains.getObjets());
+            gains.resetBonus();
+            boolean resetOk = true;
             try {
                 donationsLedger.resetCarryOver();
                 gains.setCarryOver(0);
-                currentRoundId = null;
-                lastSnapshotSignature = null;
-                resultat.setMessage("Cagnotte cumulée remise à 0.");
             } catch (IOException ex) {
                 resultat.setMessage("Erreur RAZ cagnotte cumulée : " + ex.getMessage());
                 ex.printStackTrace();
+                resetOk = false;
+            }
+            currentRoundId = null;
+            lastSnapshotSignature = null;
+            roue.updateWheelDisplay(users.getParticipantNames());
+            if (resetOk) {
+                resultat.setMessage("Nouvelle loterie prête");
             }
         });
-
-        Button btnFin = new Button("Fin de la loterie");
-        btnFin.setOnAction(e -> {
-            Integer rid = finalizeRoundAndReset();
-            try {
-                users.clearAll();
-                gains.getObjets().clear();
-                gains.resetBonus();
-                Save.save(users.getParticipants(), gains.getObjets(), gains.getExtraKamas());
-                gains.setCarryOver(donationsLedger.computeCarryOver());
-                roue.updateWheelDisplay(users.getParticipantNames());
-                currentRoundId = null;
-                lastSnapshotSignature = null;
-                String msg = "Loterie clôturée. "
-                        + (rid != null ? "Tour #" + rid + " enregistré. " : "")
-                        + "Cagnotte cumulée : " + formatKamas(gains.getCarryOver()) + " k.";
-                resultat.setMessage(msg);
-            } catch (IOException ex) {
-                resultat.setMessage("Erreur lors de la fermeture : " + ex.getMessage());
-                ex.printStackTrace();
-            }
-        });
-
-        // Bouton Historique
-        Button historyButton = new Button("Historique");
-        historyButton.setOnAction(e -> historique.show());
 
         // === Nouveau bouton "Plein écran" ===
         Button fullScreenButton = new Button("Plein écran");
@@ -352,23 +291,18 @@ public class Main extends Application {
         });
 
         Button[] bottomButtons = {
-                btnNouveauxPayants,
                 spinButton,
                 optionsButton,
                 resetButton,
                 saveButton,
                 cleanButton,
-                resetCarryButton,
-                btnFin,
-                fullScreenButton,
-                historyButton
+                fullScreenButton
         };
         for (Button button : bottomButtons) {
             Theme.styleButton(button);
             button.setMinWidth(Region.USE_PREF_SIZE);
         }
         spinButton.getStyleClass().add("primary");
-        btnFin.getStyleClass().add("danger");
 
         FlowPane bottomBox = new FlowPane(12, 12);
         bottomBox.setAlignment(Pos.CENTER);

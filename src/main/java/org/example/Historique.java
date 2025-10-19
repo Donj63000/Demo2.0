@@ -1,20 +1,34 @@
 package org.example;
 
+import javafx.animation.PauseTransition;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
+import javafx.scene.control.Tooltip;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.util.Duration;
+
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Fenêtre affichant l'historique des tirages.
@@ -22,10 +36,12 @@ import java.time.format.DateTimeFormatter;
  */
 public class Historique extends Stage {
 
-    private final ObservableList<String> lignes = FXCollections.observableArrayList();
-    private final ListView<String> listView;
+    private final ObservableList<HistoryEntry> lignes = FXCollections.observableArrayList();
+    private final ListView<HistoryEntry> listView;
     private final Gains gains;
     private final DonationsLedger ledger;
+    private Tooltip activeTooltip;
+
     private static final Path FILE = Path.of("loterie-historique.txt");
     private static final DateTimeFormatter FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -37,6 +53,22 @@ public class Historique extends Stage {
 
         listView = new ListView<>(lignes);
         Theme.styleListView(listView);
+        listView.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(HistoryEntry item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item.summary());
+            }
+        });
+        listView.setOnMouseClicked(event -> {
+            if (event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 2) {
+                HistoryEntry entry = listView.getSelectionModel().getSelectedItem();
+                if (entry != null) {
+                    showEntryTooltip(entry, event.getScreenX(), event.getScreenY());
+                }
+            }
+        });
+        listView.getSelectionModel().selectedItemProperty().addListener((obs, ov, nv) -> hideActiveTooltip());
 
         Button btnSuppr = new Button("Supprimer");
         Theme.styleButton(btnSuppr);
@@ -44,6 +76,7 @@ public class Historique extends Stage {
             int idx = listView.getSelectionModel().getSelectedIndex();
             if (idx >= 0) {
                 lignes.remove(idx);
+                hideActiveTooltip();
             }
         });
 
@@ -53,39 +86,70 @@ public class Historique extends Stage {
                 new DonationsHistory(ledger, gains.totalKamasProperty()).show());
 
         HBox actions = new HBox(10, btnSuppr, btnDonations);
+        actions.setAlignment(Pos.CENTER_RIGHT);
+        actions.setPadding(new Insets(4, 0, 0, 0));
 
-        VBox root = new VBox(10, listView, actions);
-        root.setPadding(new Insets(10));
+        VBox root = new VBox(12, listView, actions);
+        root.setPadding(new Insets(14));
+        Theme.styleDialogRoot(root);
         Scene scene = new Scene(root, 400, 300);
         setScene(scene);
+
+        setOnHidden(e -> hideActiveTooltip());
 
         // Charge l'historique depuis le fichier s'il existe
         loadHistory();
 
         // Sauvegarde automatique à chaque modification
-        lignes.addListener((ListChangeListener<String>) c -> saveHistory());
+        lignes.addListener((ListChangeListener<HistoryEntry>) c -> saveHistory());
     }
 
-    /** Ajoute une ligne dans l'historique pour le tirage indiqué. */
-    public void logResult(String pseudo, int payoutKamas) {
+    /**
+     * Ajoute une ligne dans l'historique pour le tirage indiqué.
+     * @param pseudo       gagnant (ou {@code null} si perdu)
+     * @param potKamas     montant du pot pour ce tirage
+     * @param participants participants admissibles lors du tirage
+     */
+    public void logResult(String pseudo, int potKamas, List<String> participants) {
+        LocalDateTime now = LocalDateTime.now();
         StringBuilder sb = new StringBuilder();
-        sb.append(LocalDateTime.now().format(FORMATTER)).append(" - ");
+        sb.append(now.format(FORMATTER)).append(" - ");
         if (pseudo != null) {
-            sb.append("Vainqueur : ").append(pseudo).append(" - Gains : ")
-                    .append(payoutKamas).append(" k");
+            sb.append("Vainqueur : ").append(pseudo)
+                    .append(" - Gains : ").append(potKamas).append(" k");
             if (!gains.getObjets().isEmpty()) {
                 sb.append(" + ").append(String.join(", ", gains.getObjets()));
             }
         } else {
             sb.append("Perdu");
         }
-        lignes.add(sb.toString());
+
+        List<String> cleanedParticipants = participants == null
+                ? List.of()
+                : participants.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toUnmodifiableList());
+
+        HistoryEntry entry = new HistoryEntry(
+                now,
+                sb.toString(),
+                pseudo,
+                Math.max(0, potKamas),
+                cleanedParticipants
+        );
+        lignes.add(entry);
     }
 
     private void loadHistory() {
         try {
             if (Files.exists(FILE)) {
-                lignes.setAll(Files.readAllLines(FILE));
+                List<HistoryEntry> loaded = Files.readAllLines(FILE).stream()
+                        .map(HistoryEntry::deserialize)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+                lignes.setAll(loaded);
             }
         } catch (IOException ex) {
             System.err.println("Impossible de relire l'historique : " + ex.getMessage());
@@ -94,9 +158,201 @@ public class Historique extends Stage {
 
     private void saveHistory() {
         try {
-            Files.write(FILE, lignes);
+            List<String> serialized = lignes.stream()
+                    .map(HistoryEntry::serialize)
+                    .collect(Collectors.toList());
+            Files.write(FILE, serialized);
         } catch (IOException ex) {
             System.err.println("Impossible de sauvegarder l'historique : " + ex.getMessage());
+        }
+    }
+
+    private void showEntryTooltip(HistoryEntry entry, double screenX, double screenY) {
+        hideActiveTooltip();
+        String details = entry.details();
+        if (details.isBlank()) {
+            return;
+        }
+        Tooltip tooltip = new Tooltip(details);
+        tooltip.setAutoHide(true);
+        tooltip.show(listView, screenX + 12, screenY + 12);
+        activeTooltip = tooltip;
+
+        PauseTransition hideDelay = new PauseTransition(Duration.seconds(6));
+        hideDelay.setOnFinished(evt -> {
+            if (activeTooltip == tooltip) {
+                tooltip.hide();
+                activeTooltip = null;
+            }
+        });
+        hideDelay.play();
+    }
+
+    private void hideActiveTooltip() {
+        if (activeTooltip != null) {
+            activeTooltip.hide();
+            activeTooltip = null;
+        }
+    }
+
+    private record HistoryEntry(LocalDateTime timestamp,
+                                String summary,
+                                String winner,
+                                int potKamas,
+                                List<String> participants) {
+
+        private static final String FIELD_SEPARATOR = "\t";
+        private static final String LIST_SEPARATOR = ",";
+
+        private static HistoryEntry deserialize(String rawLine) {
+            if (rawLine == null) {
+                return null;
+            }
+            String[] parts = rawLine.split(FIELD_SEPARATOR, -1);
+
+            if (parts.length == 1) {
+                String summary = parts[0];
+                LocalDateTime ts = tryExtractTimestamp(summary);
+                return new HistoryEntry(ts, summary, null, 0, List.of());
+            }
+
+            LocalDateTime timestamp = parseTimestamp(parts[0]);
+            String summary = decodeOrFallback(parts, 1, rawLine);
+            String winner = decodeOrNull(parts, 2);
+            int pot = parseIntSafe(parts, 3);
+            List<String> participants = parseParticipants(parts);
+
+            return new HistoryEntry(timestamp, summary, winner, pot, participants);
+        }
+
+        private String serialize() {
+            String timestampToken = timestamp != null ? timestamp.format(FORMATTER) : "";
+            String summaryToken = encode(summary);
+            String winnerToken = encode(winner);
+            String potToken = Integer.toString(Math.max(0, potKamas));
+            String participantsToken = participants.isEmpty()
+                    ? ""
+                    : participants.stream()
+                    .map(HistoryEntry::encode)
+                    .collect(Collectors.joining(LIST_SEPARATOR));
+
+            return String.join(FIELD_SEPARATOR,
+                    timestampToken,
+                    summaryToken,
+                    winnerToken,
+                    potToken,
+                    participantsToken
+            );
+        }
+
+        private String details() {
+            StringBuilder sb = new StringBuilder();
+            sb.append(summary != null ? summary : "Tirage inconnu");
+
+            sb.append("\n\nCagnotte : ");
+            if (potKamas > 0) {
+                sb.append(Kamas.formatFr(potKamas)).append(" k");
+            } else {
+                sb.append("Non disponible");
+            }
+
+            sb.append("\nGagnant : ");
+            if (winner != null && !winner.isBlank()) {
+                sb.append(winner);
+            } else {
+                sb.append("Aucun (pot conservé)");
+            }
+
+            sb.append("\nParticipants : ");
+            if (!participants.isEmpty()) {
+                sb.append(String.join(", ", participants));
+            } else {
+                sb.append("Non disponibles");
+            }
+
+            return sb.toString();
+        }
+
+        private static String encode(String value) {
+            if (value == null || value.isEmpty()) {
+                return "";
+            }
+            return Base64.getEncoder()
+                    .encodeToString(value.getBytes(StandardCharsets.UTF_8));
+        }
+
+        private static String decode(String value) {
+            if (value == null || value.isEmpty()) {
+                return "";
+            }
+            try {
+                return new String(Base64.getDecoder().decode(value), StandardCharsets.UTF_8);
+            } catch (IllegalArgumentException ex) {
+                return value;
+            }
+        }
+
+        private static String decodeOrNull(String[] parts, int index) {
+            if (index >= parts.length || parts[index].isEmpty()) {
+                return null;
+            }
+            return decode(parts[index]);
+        }
+
+        private static String decodeOrFallback(String[] parts, int index, String fallback) {
+            if (index >= parts.length || parts[index].isEmpty()) {
+                return fallback;
+            }
+            return decode(parts[index]);
+        }
+
+        private static LocalDateTime parseTimestamp(String raw) {
+            if (raw == null || raw.isBlank()) {
+                return null;
+            }
+            try {
+                return LocalDateTime.parse(raw, FORMATTER);
+            } catch (DateTimeParseException ignored) {
+                return null;
+            }
+        }
+
+        private static int parseIntSafe(String[] parts, int index) {
+            if (index >= parts.length || parts[index].isBlank()) {
+                return 0;
+            }
+            try {
+                return Integer.parseInt(parts[index]);
+            } catch (NumberFormatException ex) {
+                return 0;
+            }
+        }
+
+        private static List<String> parseParticipants(String[] parts) {
+            if (parts.length <= 4 || parts[4].isEmpty()) {
+                return List.of();
+            }
+            String[] tokens = parts[4].split(LIST_SEPARATOR, -1);
+            List<String> participants = new ArrayList<>(tokens.length);
+            for (String token : tokens) {
+                if (token.isEmpty()) {
+                    continue;
+                }
+                participants.add(decode(token));
+            }
+            return List.copyOf(participants);
+        }
+
+        private static LocalDateTime tryExtractTimestamp(String summary) {
+            if (summary == null || summary.length() < 19) {
+                return null;
+            }
+            String prefix = summary.substring(0, 19);
+            try {
+                return LocalDateTime.parse(prefix, FORMATTER);
+            } catch (DateTimeParseException ignored) {
+                return null;
+            }
         }
     }
 }
