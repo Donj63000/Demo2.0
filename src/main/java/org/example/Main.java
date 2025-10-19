@@ -20,6 +20,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -350,31 +351,37 @@ public class Main extends Application {
             primaryStage.setFullScreen(!current);
         });
 
-        // Style
-        Theme.styleButton(btnNouveauxPayants);
-        Theme.styleButton(spinButton);
-        Theme.styleButton(optionsButton);
-        Theme.styleButton(resetButton);
-        Theme.styleButton(saveButton);
-        Theme.styleButton(cleanButton);
-        Theme.styleButton(resetCarryButton);
-        Theme.styleButton(btnFin);
-        Theme.styleButton(historyButton);
-        Theme.styleButton(fullScreenButton);
-
-        HBox bottomBox = new HBox(30,
+        Button[] bottomButtons = {
                 btnNouveauxPayants,
-                spinButton, optionsButton, resetButton,
-                saveButton, cleanButton, resetCarryButton, btnFin,
+                spinButton,
+                optionsButton,
+                resetButton,
+                saveButton,
+                cleanButton,
+                resetCarryButton,
+                btnFin,
                 fullScreenButton,
                 historyButton
-        );
+        };
+        for (Button button : bottomButtons) {
+            Theme.styleButton(button);
+            button.setMinWidth(Region.USE_PREF_SIZE);
+        }
+        spinButton.getStyleClass().add("primary");
+        btnFin.getStyleClass().add("danger");
+
+        FlowPane bottomBox = new FlowPane(12, 12);
         bottomBox.setAlignment(Pos.CENTER);
-        bottomBox.setPadding(new Insets(16, 0, 20, 0));
+        bottomBox.setPadding(new Insets(16, 20, 20, 20));
+        bottomBox.prefWrapLengthProperty().bind(root.widthProperty().subtract(40));
+        bottomBox.getChildren().addAll(bottomButtons);
         root.setBottom(bottomBox);
 
         // === 6) Scène + Stage ===
         Scene scene = new Scene(root, SCENE_WIDTH, SCENE_HEIGHT);
+        scene.getStylesheets().add(
+                Objects.requireNonNull(getClass().getResource("/app.css")).toExternalForm()
+        );
         primaryStage.setTitle("Loterie de la guilde Evolution [By Coca]");
         primaryStage.setScene(scene);
 

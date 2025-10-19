@@ -2,7 +2,6 @@ package org.example;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Cursor;
 import javafx.scene.control.*;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
@@ -31,60 +30,11 @@ public class Theme {
     }
 
     public static void styleButton(Button b) {
-        String baseGradient = "linear-gradient(to bottom, " + toWebColor(ACCENT_LIGHT) + " 0%, " + toWebColor(ACCENT) + " 100%)";
-        String normal =
-                "-fx-background-color: " + baseGradient + ";" +
-                        "-fx-background-radius: 18;" +
-                        "-fx-border-radius: 18;" +
-                        "-fx-border-color: rgba(255,255,255,0.28);" +
-                        "-fx-border-width: 1.4;" +
-                        "-fx-text-fill: #ffffff;" +
-                        "-fx-text-alignment: center;" +
-                        "-fx-alignment: center;" +
-                        "-fx-font-weight: bold;" +
-                        "-fx-font-size: 15px;" +
-                        "-fx-padding: 12 32;" +
-                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 14, 0.25, 0, 6);";
-        String hover =
-                "-fx-background-color: linear-gradient(to bottom, " + toWebColor(ACCENT_LIGHT.brighter()) + " 0%, " + toWebColor(ACCENT.brighter()) + " 100%);" +
-                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.65), 18, 0.32, 0, 8);";
-        String pressed =
-                "-fx-background-color: linear-gradient(to bottom, " + toWebColor(ACCENT.darker()) + " 0%, " + toWebColor(ACCENT.darker().darker()) + " 100%);" +
-                        "-fx-padding: 12 28 10 28;" +
-                        "-fx-effect: innershadow(two-pass-box, rgba(0,0,0,0.45), 8, 0.3, 0, 2);";
-        String focus =
-                "-fx-border-color: rgba(255,255,255,0.6);" +
-                        "-fx-border-width: 1.8;";
-
+        if (!b.getStyleClass().contains("app-button")) {
+            b.getStyleClass().add("app-button");
+        }
         b.setWrapText(false);
         b.setMnemonicParsing(false);
-        b.setStyle(normal);
-        b.setCursor(Cursor.HAND);
-        b.setOnMouseEntered(e -> b.setStyle(normal + hover));
-        b.setOnMouseExited(e -> {
-            b.setStyle(normal);
-            if (b.isFocused()) {
-                b.setStyle(normal + focus);
-            }
-        });
-        b.focusedProperty().addListener((obs, oldV, newV) -> {
-            if (newV) {
-                b.setStyle(normal + focus);
-            } else {
-                b.setStyle(normal);
-            }
-        });
-        b.pressedProperty().addListener((o, ov, nv) -> {
-            if (nv) {
-                b.setStyle(normal + pressed);
-            } else if (b.isHover()) {
-                b.setStyle(normal + hover);
-            } else if (b.isFocused()) {
-                b.setStyle(normal + focus);
-            } else {
-                b.setStyle(normal);
-            }
-        });
     }
 
     public static void styleListView(ListView<?> lv) {
