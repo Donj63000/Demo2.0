@@ -7,6 +7,7 @@ import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.control.TextFormatter;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
@@ -22,7 +23,7 @@ public class Users {
 
     private final ObservableList<Participant> participants = FXCollections.observableArrayList();
     private final TableView<Participant>      table        = new TableView<>(participants);
-    private final VBox                        root         = new VBox(10);
+    private final VBox                        root         = new VBox(6);
 
     private static final double GOLDEN_ANGLE = 137.50776405003785;
     private static final int DEFAULT_INSCRIPTION_K = Participant.DEFAULT_STAKE;
@@ -100,15 +101,18 @@ public class Users {
 
         table.getColumns().setAll(colReplay, colPaid, colNom, colKamas, colDon);
         table.setEditable(true);
-        table.setPrefHeight(600);
+        table.setPrefHeight(520);
         Theme.styleTableView(table);
 
         /* === Formulaire =============================================== */
         TextField tNom   = new TextField(); tNom.setPromptText("Pseudo");  Theme.styleTextField(tNom);
+        tNom.setPrefWidth(140);
         TextField tKamas = new TextField();
+        tKamas.setPrefWidth(120);
         tKamas.setPromptText(Kamas.formatFr(DEFAULT_INSCRIPTION_K) + " (par défaut)");
         Theme.styleTextField(tKamas);
         TextField tDon   = new TextField(); tDon.setPromptText("Don");    Theme.styleTextField(tDon);
+        tDon.setPrefWidth(140);
 
         tKamas.setTextFormatter(new TextFormatter<>(change -> {
             String next = change.getControlNewText();
@@ -117,6 +121,11 @@ public class Users {
 
         Button add = new Button("Ajouter");   Theme.styleButton(add);
         Button del = new Button("Supprimer"); Theme.styleButton(del);
+
+        HBox inputRow = new HBox(6, tNom, tKamas, tDon);
+        inputRow.setAlignment(Pos.CENTER_LEFT);
+        HBox buttonRow = new HBox(6, add, del);
+        buttonRow.setAlignment(Pos.CENTER_LEFT);
 
         add.setOnAction(e -> {
             String n = tNom.getText().trim();
@@ -142,7 +151,7 @@ public class Users {
         Label lbl = new Label("Participants :");
         Theme.styleCapsuleLabel(lbl, "#4facfe", "#00f2fe");
 
-        root.getChildren().addAll(lbl, table, tNom, tKamas, tDon, add, del);
+        root.getChildren().addAll(lbl, table, inputRow, buttonRow);
 
         /* === Sync roue ↔ table ======================================== */
         participants.addListener((ListChangeListener<Participant>) change -> {

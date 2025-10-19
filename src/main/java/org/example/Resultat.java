@@ -25,8 +25,8 @@ public class Resultat {
     /* ==================== constructeur ==================== */
     public Resultat() {
         // typographies & couleurs
-        icon .setFont(Font.font("Segoe UI Emoji", FontWeight.BOLD, 26));
-        label.setFont(Font.font("Montserrat",   FontWeight.BOLD, 24));
+        icon .setFont(Font.font("Segoe UI Emoji", FontWeight.BOLD, 22));
+        label.setFont(Font.font("Montserrat",   FontWeight.BOLD, 21));
         icon .setFill(Color.WHITE);
         label.setFill(Color.WHITE);
 
@@ -35,7 +35,7 @@ public class Resultat {
         content.setAlignment(Pos.CENTER_LEFT);
 
         root.getChildren().add(content);
-        root.setPadding(new Insets(14, 34, 14, 34));
+        root.setPadding(new Insets(6, 24, 6, 24));
         root.setMaxWidth(Region.USE_PREF_SIZE);
 
         // ombre rouge foncé (halo discret)

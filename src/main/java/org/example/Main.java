@@ -32,7 +32,7 @@ public class Main extends Application {
     public static final double SCENE_HEIGHT  = 900;
 
     // Rayon de la roue
-    public static final double WHEEL_RADIUS  = 320;
+    public static final double WHEEL_RADIUS  = 280;
 
     // Durée du spin
     public static final double SPIN_DURATION = 5.0; // en secondes
@@ -61,11 +61,12 @@ public class Main extends Application {
         HBox topBox = new HBox(resultat.getNode());
         topBox.setAlignment(Pos.CENTER);
 
-        VBox topContainer = new VBox(4,
+        VBox topContainer = new VBox(1,
                 bandeau.getNode(),
                 topBox
         );
         topContainer.setAlignment(Pos.TOP_LEFT);
+        topContainer.setPadding(new Insets(0, 0, 2, 0));
         root.setTop(topContainer);
 
         // Image de fond
@@ -81,29 +82,32 @@ public class Main extends Application {
         historyButton.setOnAction(e -> historique.show());
         Theme.styleButton(historyButton);
 
-        VBox leftBox = new VBox(10, historyButton, users.getRootPane());
-        leftBox.setPadding(new Insets(10, 10, 10, 20));
+        VBox leftBox = new VBox(8, historyButton, users.getRootPane());
+        leftBox.setPadding(new Insets(6, 10, 6, 18));
         leftBox.setAlignment(Pos.TOP_LEFT);
 
-        // Agrandit la zone : 420 px large × 820 px haut
-        leftBox.setPrefSize(420, 820);
+        // Largeur fixe, hauteur adaptable pour libérer l'espace vertical
+        leftBox.setPrefWidth(400);
+        leftBox.setMinWidth(360);
+        leftBox.setPrefHeight(Region.USE_COMPUTED_SIZE);
         root.setLeft(leftBox);
 
         // === 3) Gains (droite) ===
-        VBox rightBox = new VBox(10, gains.getRootPane());
-        // Padding-top = 0 => ils sont “collés” sous le titre
-        rightBox.setPadding(new Insets(0, 20, 10, 10));
+        VBox rightBox = new VBox(8, gains.getRootPane());
+        rightBox.setPadding(new Insets(4, 18, 8, 10));
         rightBox.setAlignment(Pos.TOP_CENTER);
-
-        // Agrandit la zone : 400 px large × 820 px haut
-        rightBox.setPrefSize(400, 820);
+        rightBox.setPrefWidth(360);
+        rightBox.setMinWidth(320);
+        rightBox.setPrefHeight(Region.USE_COMPUTED_SIZE);
         root.setRight(rightBox);
 
         // === 4) Roue au centre ===
         roue = new Roue(resultat);
         StackPane centerPane = new StackPane(roue.getRootPane());
-        centerPane.setAlignment(Pos.CENTER);
-        centerPane.setMaxSize(WHEEL_RADIUS * 2 + 50, WHEEL_RADIUS * 2 + 50);
+        centerPane.setAlignment(Pos.TOP_CENTER);
+        centerPane.setPadding(new Insets(0, 0, 0, 0));
+        centerPane.setMaxSize(WHEEL_RADIUS * 2 + 40, WHEEL_RADIUS * 2 + 40);
+        centerPane.setTranslateY(-6);
         root.setCenter(centerPane);
 
         // Recharge la sauvegarde, s’il y en a une
@@ -314,10 +318,10 @@ public class Main extends Application {
         }
         spinButton.getStyleClass().add("primary");
 
-        FlowPane bottomBox = new FlowPane(12, 12);
+        FlowPane bottomBox = new FlowPane(10, 8);
         bottomBox.setAlignment(Pos.CENTER);
-        bottomBox.setPadding(new Insets(10, 20, 50, 20));
-        bottomBox.prefWrapLengthProperty().bind(root.widthProperty().subtract(40));
+        bottomBox.setPadding(new Insets(2, 12, 8, 12));
+        bottomBox.prefWrapLengthProperty().bind(root.widthProperty().subtract(28));
         bottomBox.getChildren().addAll(bottomButtons);
         root.setBottom(bottomBox);
 

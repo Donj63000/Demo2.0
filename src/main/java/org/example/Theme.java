@@ -86,13 +86,13 @@ public class Theme {
     }
 
     public static void styleCapsuleLabel(Label label, String startColor, String endColor) {
-        label.setFont(Font.font("Roboto", FontWeight.BOLD, 18));
+        label.setFont(Font.font("Roboto", FontWeight.BOLD, 16));
         label.setTextFill(Color.WHITE);
-        label.setPadding(new Insets(8, 16, 8, 16));
+        label.setPadding(new Insets(6, 14, 6, 14));
         label.setAlignment(Pos.CENTER);
         LinearGradient gradient = new LinearGradient(0, 0, 1, 0, true, CycleMethod.NO_CYCLE, new Stop(0, Color.web(startColor)), new Stop(1, Color.web(endColor)));
         label.setBackground(new Background(new BackgroundFill(gradient, new CornerRadii(18), Insets.EMPTY)));
-        label.setEffect(new DropShadow(10, Color.rgb(0, 0, 0, 0.35)));
+        label.setEffect(new DropShadow(8, Color.rgb(0, 0, 0, 0.3)));
     }
 
     public static void styleDialogRoot(Region root) {

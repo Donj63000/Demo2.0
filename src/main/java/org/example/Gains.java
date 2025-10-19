@@ -44,7 +44,7 @@ public class Gains {
 
         /* ========== 1) CAGNOTTE ========== */
         txtExtra = new TextField("0");
-        txtExtra.setPrefWidth(60);
+        txtExtra.setPrefWidth(56);
         Theme.styleTextField(txtExtra);
         txtExtra.setTextFormatter(new TextFormatter<>(change -> {
             String next = change.getControlNewText();
@@ -83,7 +83,7 @@ public class Gains {
 
         /* ========== 2) OBJETS ========== */
         listView = new ListView<>(objets);
-        listView.setPrefSize(160, 300);
+        listView.setPrefSize(150, 240);
         Theme.styleListView(listView);
 
         // Gros, vert
@@ -95,7 +95,7 @@ public class Gains {
                     setText(null);
                 } else {
                     setText(item);
-                    setStyle("-fx-font-size: 18px; -fx-text-fill: green;");
+                    setStyle("-fx-font-size: 15px; -fx-text-fill: green;");
                 }
             }
         });
@@ -144,15 +144,15 @@ public class Gains {
         refreshObjets();
         recomputeTotal();
 
-        VBox objetsBox = new VBox(6, lblObjets, listView, txtNew, btnAdd, btnDel);
-        objetsBox.setPadding(new Insets(8, 0, 0, 0));
+        VBox objetsBox = new VBox(5, lblObjets, listView, txtNew, btnAdd, btnDel);
+        objetsBox.setPadding(new Insets(6, 0, 0, 0));
 
-        VBox vbKamas = new VBox(6,
+        VBox vbKamas = new VBox(5,
                 txtExtra,
                 bonusButtons
         );
 
-        root = new VBox(10,
+        root = new VBox(8,
                 lblTotal,
                 vbKamas,
                 new Separator(),
