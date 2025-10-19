@@ -1,0 +1,50 @@
+.app-button {
+    -fx-background-radius: 18;
+    -fx-background-insets: 0, 1, 2;
+    -fx-padding: 12 32;
+    -fx-font-family: "Arial";
+    -fx-font-weight: bold;
+    -fx-font-size: 15px;
+    -fx-text-fill: white;
+    -fx-text-alignment: center;
+    -fx-alignment: center;
+    -fx-cursor: hand;
+    -fx-background-color:
+        linear-gradient(to bottom, #00f2fe, #4facfe),
+        linear-gradient(to bottom, rgba(255,255,255,.35), rgba(255,255,255,.15)),
+        linear-gradient(to bottom, rgba(0,0,0,.05), rgba(0,0,0,.15));
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,.35), 12, 0.35, 0, 2);
+}
+
+.app-button:hover {
+    -fx-background-color:
+        linear-gradient(to bottom, #56f1ff, #66bcff),
+        linear-gradient(to bottom, rgba(255,255,255,.45), rgba(255,255,255,.20)),
+        linear-gradient(to bottom, rgba(0,0,0,.03), rgba(0,0,0,.08));
+}
+
+.app-button:armed {
+    -fx-background-insets: 2, 1, 0;
+    -fx-translate-y: 1;
+}
+
+.app-button:focused {
+    -fx-effect: dropshadow(gaussian, rgba(79,172,254,.8), 14, 0.7, 0, 0);
+}
+
+.app-button:disabled {
+    -fx-opacity: .6;
+    -fx-effect: none;
+}
+
+.app-button.primary {
+    -fx-font-size: 16px;
+    -fx-padding: 14 34;
+}
+
+.app-button.danger {
+    -fx-background-color:
+        linear-gradient(to bottom, #ff8a80, #ff3d00),
+        linear-gradient(to bottom, rgba(255,255,255,.35), rgba(255,255,255,.15)),
+        linear-gradient(to bottom, rgba(0,0,0,.05), rgba(0,0,0,.15));
+}
