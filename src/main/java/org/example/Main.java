@@ -284,10 +284,10 @@ public class Main extends Application {
                         donationsLedger.appendPayout(snapshotRoundId, winnerName, roundPot);
                         finalizeRoundAndReset();
                         resultat.setMessage(winnerName + " remporte " + formatKamas(roundPot) + " k !");
-                        historique.logResult(winnerName, roundPot, participantSnapshot);
+                        historique.logResult(winnerName, roundPot, participantSnapshot, snapshotRoundId);
                     } else {
                         resultat.setMessage("Perdu ! Pot conservé : " + formatKamas(roundPot) + " k");
-                        historique.logResult(null, roundPot, participantSnapshot);
+                        historique.logResult(null, roundPot, participantSnapshot, snapshotRoundId);
                     }
                 } catch (IOException ex) {
                     resultat.setMessage("Erreur payout : " + ex.getMessage());

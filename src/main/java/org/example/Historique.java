@@ -80,12 +80,7 @@ public class Historique extends Stage {
             }
         });
 
-        Button btnDonations = new Button("Historique des dons");
-        Theme.styleButton(btnDonations);
-        btnDonations.setOnAction(e ->
-                new DonationsHistory(ledger, gains.totalKamasProperty()).show());
-
-        HBox actions = new HBox(10, btnSuppr, btnDonations);
+        HBox actions = new HBox(10, btnSuppr);
         actions.setAlignment(Pos.CENTER_RIGHT);
         actions.setPadding(new Insets(4, 0, 0, 0));
 
@@ -110,7 +105,7 @@ public class Historique extends Stage {
      * @param potKamas     montant du pot pour ce tirage
      * @param participants participants admissibles lors du tirage
      */
-    public void logResult(String pseudo, int potKamas, List<String> participants) {
+    public void logResult(String pseudo, int potKamas, List<String> participants, int roundId) {
         LocalDateTime now = LocalDateTime.now();
         StringBuilder sb = new StringBuilder();
         sb.append(now.format(FORMATTER)).append(" - ");
@@ -137,7 +132,8 @@ public class Historique extends Stage {
                 sb.toString(),
                 pseudo,
                 Math.max(0, potKamas),
-                cleanedParticipants
+                cleanedParticipants,
+                roundId
         );
         lignes.add(entry);
     }
@@ -169,11 +165,13 @@ public class Historique extends Stage {
 
     private void showEntryTooltip(HistoryEntry entry, double screenX, double screenY) {
         hideActiveTooltip();
-        String details = entry.details();
+        String details = buildDetails(entry);
         if (details.isBlank()) {
             return;
         }
         Tooltip tooltip = new Tooltip(details);
+        tooltip.setWrapText(true);
+        tooltip.setMaxWidth(460);
         tooltip.setAutoHide(true);
         tooltip.show(listView, screenX + 12, screenY + 12);
         activeTooltip = tooltip;
@@ -194,12 +192,90 @@ public class Historique extends Stage {
             activeTooltip = null;
         }
     }
+    
+    private String buildDetails(HistoryEntry entry) {
+        if (entry == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        if (entry.summary() != null && !entry.summary().isBlank()) {
+            sb.append(entry.summary());
+        } else if (entry.timestamp() != null) {
+            sb.append(entry.timestamp().format(FORMATTER));
+        } else {
+            sb.append("Tirage inconnu");
+        }
+
+        DonationsLedger.RoundRecord roundRecord = null;
+        if (entry.roundId() != null) {
+            roundRecord = ledger.findRoundRecord(entry.roundId()).orElse(null);
+        }
+
+        if (entry.timestamp() != null) {
+            String stamp = entry.timestamp().format(FORMATTER);
+            if (entry.summary() == null || !entry.summary().startsWith(stamp)) {
+                sb.append("\nHorodatage : ").append(stamp);
+            }
+        }
+
+        sb.append("\nTour : ");
+        if (entry.roundId() != null) {
+            sb.append("#").append(entry.roundId());
+        } else {
+            sb.append("Non référencé");
+        }
+
+        int potValue = roundRecord != null ? roundRecord.pot() : entry.potKamas();
+        sb.append("\nPot total : ");
+        if (potValue > 0) {
+            sb.append(Kamas.formatFr(potValue)).append(" k");
+        } else {
+            sb.append("Non disponible");
+        }
+
+        if (roundRecord != null) {
+            sb.append("\nBonus : ");
+            if (roundRecord.bonus() > 0) {
+                sb.append(Kamas.formatFr(roundRecord.bonus())).append(" k");
+            } else {
+                sb.append("—");
+            }
+
+            sb.append("\nPayout : ");
+            if (roundRecord.hasWinner()) {
+                sb.append(Kamas.formatFr(roundRecord.payout())).append(" k");
+            } else {
+                sb.append("—");
+            }
+        }
+
+        String winner = roundRecord != null && roundRecord.hasWinner()
+                ? roundRecord.winner()
+                : entry.winner();
+        sb.append("\nGagnant : ");
+        if (winner != null && !winner.isBlank()) {
+            sb.append(winner);
+        } else {
+            sb.append("Aucun (pot conservé)");
+        }
+
+        if (roundRecord != null && !roundRecord.donations().isEmpty()) {
+            sb.append("\nContributions :");
+            roundRecord.donations().forEach((name, amount) ->
+                    sb.append("\n  - ").append(name).append(" : ").append(Kamas.formatFr(amount)).append(" k"));
+        } else if (!entry.participants().isEmpty()) {
+            sb.append("\nParticipants : ").append(String.join(", ", entry.participants()));
+        }
+
+        return sb.toString();
+    }
 
     private record HistoryEntry(LocalDateTime timestamp,
                                 String summary,
                                 String winner,
                                 int potKamas,
-                                List<String> participants) {
+                                List<String> participants,
+                                Integer roundId) {
 
         private static final String FIELD_SEPARATOR = "\t";
         private static final String LIST_SEPARATOR = ",";
@@ -213,7 +289,7 @@ public class Historique extends Stage {
             if (parts.length == 1) {
                 String summary = parts[0];
                 LocalDateTime ts = tryExtractTimestamp(summary);
-                return new HistoryEntry(ts, summary, null, 0, List.of());
+                return new HistoryEntry(ts, summary, null, 0, List.of(), null);
             }
 
             LocalDateTime timestamp = parseTimestamp(parts[0]);
@@ -221,8 +297,9 @@ public class Historique extends Stage {
             String winner = decodeOrNull(parts, 2);
             int pot = parseIntSafe(parts, 3);
             List<String> participants = parseParticipants(parts);
+            Integer roundId = parseIntegerOrNull(parts, 5);
 
-            return new HistoryEntry(timestamp, summary, winner, pot, participants);
+            return new HistoryEntry(timestamp, summary, winner, pot, participants, roundId);
         }
 
         private String serialize() {
@@ -235,42 +312,16 @@ public class Historique extends Stage {
                     : participants.stream()
                     .map(HistoryEntry::encode)
                     .collect(Collectors.joining(LIST_SEPARATOR));
+            String roundIdToken = roundId == null ? "" : Integer.toString(Math.max(0, roundId));
 
             return String.join(FIELD_SEPARATOR,
                     timestampToken,
                     summaryToken,
                     winnerToken,
                     potToken,
-                    participantsToken
+                    participantsToken,
+                    roundIdToken
             );
-        }
-
-        private String details() {
-            StringBuilder sb = new StringBuilder();
-            sb.append(summary != null ? summary : "Tirage inconnu");
-
-            sb.append("\n\nCagnotte : ");
-            if (potKamas > 0) {
-                sb.append(Kamas.formatFr(potKamas)).append(" k");
-            } else {
-                sb.append("Non disponible");
-            }
-
-            sb.append("\nGagnant : ");
-            if (winner != null && !winner.isBlank()) {
-                sb.append(winner);
-            } else {
-                sb.append("Aucun (pot conservé)");
-            }
-
-            sb.append("\nParticipants : ");
-            if (!participants.isEmpty()) {
-                sb.append(String.join(", ", participants));
-            } else {
-                sb.append("Non disponibles");
-            }
-
-            return sb.toString();
         }
 
         private static String encode(String value) {
@@ -341,6 +392,17 @@ public class Historique extends Stage {
                 participants.add(decode(token));
             }
             return List.copyOf(participants);
+        }
+
+        private static Integer parseIntegerOrNull(String[] parts, int index) {
+            if (index >= parts.length || parts[index].isBlank()) {
+                return null;
+            }
+            try {
+                return Integer.valueOf(parts[index]);
+            } catch (NumberFormatException ex) {
+                return null;
+            }
         }
 
         private static LocalDateTime tryExtractTimestamp(String summary) {
