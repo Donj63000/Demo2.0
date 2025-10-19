@@ -163,66 +163,6 @@ public class Main extends Application {
         // === 5) Boutons en bas ===
         Button spinButton = new Button("Lancer la roue !");
         spinButton.setFont(Font.font("Arial", 16));
-        spinButton.setOnAction(e -> {
-            if (spinButton.isDisable()) {
-                return;
-            }
-            spinButton.setDisable(true);
-
-            var tickets = users.getParticipantNames();
-            List<String> participantSnapshot = new ArrayList<>(tickets);
-
-            if (tickets.isEmpty()) {
-                resultat.setMessage("Aucun participant validé (Rejoue ? + Payé ?).");
-                spinButton.setDisable(false);
-                return;
-            }
-
-            int potSnapshot = gains.getTotalKamas();
-            if (potSnapshot <= 0) {
-                resultat.setMessage("Aucune mise enregistrée pour ce tour.");
-                spinButton.setDisable(false);
-                return;
-            }
-
-            final int roundPot = potSnapshot;
-            final String snapshotSignature = buildSnapshotSignature();
-            final int[] roundIdRef = new int[1];
-            try {
-                roundIdRef[0] = ensureRoundSnapshot(snapshotSignature);
-            } catch (IOException ex) {
-                resultat.setMessage("Erreur enregistrement dons : " + ex.getMessage());
-                ex.printStackTrace();
-                spinButton.setDisable(false);
-                return;
-            }
-            final int snapshotRoundId = roundIdRef[0];
-
-            roue.setOnSpinFinished(winnerName -> {
-                try {
-                    if (winnerName != null) {
-                        donationsLedger.appendPayout(snapshotRoundId, winnerName, roundPot);
-                        finalizeRoundAndReset();
-                        resultat.setMessage(winnerName + " remporte " + formatKamas(roundPot) + " k !");
-                        historique.logResult(winnerName, roundPot, participantSnapshot);
-                    } else {
-                        resultat.setMessage("Perdu ! Pot conservé : " + formatKamas(roundPot) + " k");
-                        historique.logResult(null, roundPot, participantSnapshot);
-                    }
-                } catch (IOException ex) {
-                    resultat.setMessage("Erreur payout : " + ex.getMessage());
-                    ex.printStackTrace();
-                } finally {
-                    withWheelRefreshSuppressed(() ->
-                            users.getParticipants().forEach(p -> p.setPaid(false))
-                    );
-                    spinButton.setDisable(false);
-                }
-            });
-
-            roue.updateWheelDisplay(tickets);
-            roue.spinTheWheel(tickets);
-        });
 
         Button optionsButton = new Button("Options...");
         optionsButton.setOnAction(e -> {
@@ -289,6 +229,76 @@ public class Main extends Application {
             boolean current = primaryStage.isFullScreen();
             primaryStage.setFullScreen(!current);
         });
+        Button[] buttonsToLock = {
+                spinButton,
+                optionsButton,
+                resetButton,
+                saveButton,
+                cleanButton,
+                fullScreenButton,
+                historyButton
+        };
+
+        spinButton.setOnAction(e -> {
+            if (spinButton.isDisable()) {
+                return;
+            }
+            setButtonsDisabled(true, buttonsToLock);
+
+            var tickets = users.getParticipantNames();
+            List<String> participantSnapshot = new ArrayList<>(tickets);
+
+            if (tickets.isEmpty()) {
+                resultat.setMessage("Aucun participant validé (Rejoue ? + Payé ?).");
+                setButtonsDisabled(false, buttonsToLock);
+                return;
+            }
+
+            int potSnapshot = gains.getTotalKamas();
+            if (potSnapshot <= 0) {
+                resultat.setMessage("Aucune mise enregistrée pour ce tour.");
+                setButtonsDisabled(false, buttonsToLock);
+                return;
+            }
+
+            final int roundPot = potSnapshot;
+            final String snapshotSignature = buildSnapshotSignature();
+            final int[] roundIdRef = new int[1];
+            try {
+                roundIdRef[0] = ensureRoundSnapshot(snapshotSignature);
+            } catch (IOException ex) {
+                resultat.setMessage("Erreur enregistrement dons : " + ex.getMessage());
+                ex.printStackTrace();
+                setButtonsDisabled(false, buttonsToLock);
+                return;
+            }
+            final int snapshotRoundId = roundIdRef[0];
+
+            roue.setOnSpinFinished(winnerName -> {
+                try {
+                    if (winnerName != null) {
+                        donationsLedger.appendPayout(snapshotRoundId, winnerName, roundPot);
+                        finalizeRoundAndReset();
+                        resultat.setMessage(winnerName + " remporte " + formatKamas(roundPot) + " k !");
+                        historique.logResult(winnerName, roundPot, participantSnapshot);
+                    } else {
+                        resultat.setMessage("Perdu ! Pot conservé : " + formatKamas(roundPot) + " k");
+                        historique.logResult(null, roundPot, participantSnapshot);
+                    }
+                } catch (IOException ex) {
+                    resultat.setMessage("Erreur payout : " + ex.getMessage());
+                    ex.printStackTrace();
+                } finally {
+                    withWheelRefreshSuppressed(() ->
+                            users.getParticipants().forEach(p -> p.setPaid(false))
+                    );
+                    setButtonsDisabled(false, buttonsToLock);
+                }
+            });
+
+            roue.updateWheelDisplay(tickets);
+            roue.spinTheWheel(tickets);
+        });
 
         Button[] bottomButtons = {
                 spinButton,
@@ -344,6 +354,14 @@ public class Main extends Application {
         if (listener != null) {
             participant.willReplayProperty().removeListener(listener);
             participant.paidProperty().removeListener(listener);
+        }
+    }
+
+    private static void setButtonsDisabled(boolean disabled, Button... buttons) {
+        for (Button button : buttons) {
+            if (button != null) {
+                button.setDisable(disabled);
+            }
         }
     }
 

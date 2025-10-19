@@ -247,11 +247,8 @@ public class Users {
                     return;
                 }
                 participant.setPaid(shouldBePaid);
-                int stakeAmount = participant.getStake();
-                if (stakeAmount <= 0) {
-                    stakeAmount = DEFAULT_INSCRIPTION_K;
-                    participant.setStake(stakeAmount);
-                }
+                int stakeAmount = DEFAULT_INSCRIPTION_K;
+                participant.setStake(stakeAmount);
                 if (shouldBePaid) {
                     participant.setKamas(Math.max(0, participant.getKamas() + stakeAmount));
                 } else {
