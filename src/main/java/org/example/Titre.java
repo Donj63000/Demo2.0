@@ -1,9 +1,14 @@
 package org.example;
 
 import javafx.animation.Interpolator;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
 import javafx.animation.ScaleTransition;
+import javafx.animation.Timeline;
 import javafx.animation.TranslateTransition;
 import javafx.beans.binding.Bindings;
+import javafx.beans.property.DoubleProperty;
+import javafx.beans.property.SimpleDoubleProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.CacheHint;
@@ -21,6 +26,8 @@ import javafx.scene.text.Text;
 import javafx.scene.text.TextBoundsType;
 import javafx.util.Duration;
 
+import java.util.concurrent.ThreadLocalRandom;
+
 public class Titre {
 
     private static final double H_PADDING = 18;
@@ -33,6 +40,8 @@ public class Titre {
     private final Rectangle badge;
     private final Rectangle gloss;
     private final Rectangle shimmer;
+    private final DoubleProperty shimmerHue = new SimpleDoubleProperty(ThreadLocalRandom.current().nextDouble(360));
+    private Timeline colorLoop;
 
     public Titre() {
         title = buildTitle();
@@ -120,7 +129,7 @@ public class Titre {
     private Rectangle buildShimmer() {
         Rectangle rectangle = new Rectangle();
         rectangle.setRotate(18);
-        rectangle.setFill(makeShimmerPaint(0.35));
+        rectangle.setFill(makeShimmerPaint(0.42, shimmerHue.get()));
         rectangle.setBlendMode(BlendMode.ADD);
         rectangle.setMouseTransparent(true);
         return rectangle;
@@ -150,13 +159,15 @@ public class Titre {
     }
 
     private Paint makeTitleGradient() {
-        return new LinearGradient(
-                0, 0, 1, 0, true, CycleMethod.NO_CYCLE,
+        Stop[] stops = {
                 new Stop(0, Color.web("#ffe066")),
-                new Stop(0.35, Color.web("#f783ac")),
+                new Stop(0.2, Color.web("#f783ac")),
+                new Stop(0.45, Color.web("#9b7bff")),
                 new Stop(0.7, Color.web("#4facfe")),
-                new Stop(1, Color.web("#38d9a9"))
-        );
+                new Stop(0.85, Color.web("#38d9a9")),
+                new Stop(1, Color.web("#ffe066"))
+        };
+        return new LinearGradient(0, 0, 1, 0, true, CycleMethod.NO_CYCLE, stops);
     }
 
     private DropShadow createTitleEffect() {
@@ -186,15 +197,18 @@ public class Titre {
         );
     }
 
-    private Paint makeShimmerPaint(double opacity) {
+    private Paint makeShimmerPaint(double opacity, double hue) {
+        Color peak = Color.hsb(hue % 360, 0.85, 1.0, opacity);
+        Color edge = Color.hsb((hue + 110) % 360, 0.75, 0.95, opacity * 0.75);
         return new LinearGradient(0, 0, 1, 0, true, CycleMethod.NO_CYCLE,
-                new Stop(0, Color.TRANSPARENT),
-                new Stop(0.5, Color.web("#ffffff", opacity)),
-                new Stop(1, Color.TRANSPARENT));
+                new Stop(0, Color.color(1, 1, 1, 0)),
+                new Stop(0.38, peak),
+                new Stop(0.62, edge),
+                new Stop(1, Color.color(1, 1, 1, 0)));
     }
 
     private void startShimmer() {
-        TranslateTransition slide = new TranslateTransition(Duration.seconds(4.5), shimmer);
+        TranslateTransition slide = new TranslateTransition(Duration.seconds(4.2), shimmer);
         slide.fromXProperty().bind(Bindings.createDoubleBinding(
                 () -> -badge.widthProperty().get(),
                 badge.widthProperty()
@@ -214,11 +228,6 @@ public class Titre {
         pulse.setAutoReverse(true);
         pulse.play();
 
-        shimmer.fillProperty().bind(Bindings.createObjectBinding(
-                () -> makeShimmerPaint(0.45),
-                shimmer.translateXProperty()
-        ));
-
         ScaleTransition breathe = new ScaleTransition(Duration.seconds(7), titleContainer);
         breathe.setFromX(1);
         breathe.setFromY(1);
@@ -228,5 +237,30 @@ public class Titre {
         breathe.setAutoReverse(true);
         breathe.setInterpolator(Interpolator.EASE_BOTH);
         breathe.play();
+
+        shimmer.translateXProperty().addListener((obs, old, val) -> applyShimmerFill());
+        shimmerHue.addListener((obs, old, val) -> applyShimmerFill());
+        applyShimmerFill();
+        scheduleNextColorShift();
+    }
+
+    private void applyShimmerFill() {
+        shimmer.setFill(makeShimmerPaint(0.45, shimmerHue.get() + shimmer.getTranslateX() * 0.12));
+    }
+
+    private void scheduleNextColorShift() {
+        double start = shimmerHue.get();
+        double delta = 80 + ThreadLocalRandom.current().nextDouble(180);
+        double target = (start + delta) % 360;
+        Duration duration = Duration.seconds(2.2 + ThreadLocalRandom.current().nextDouble(2.8));
+        if (colorLoop != null) {
+            colorLoop.stop();
+        }
+        colorLoop = new Timeline(
+                new KeyFrame(Duration.ZERO, new KeyValue(shimmerHue, start)),
+                new KeyFrame(duration, new KeyValue(shimmerHue, target, Interpolator.EASE_BOTH))
+        );
+        colorLoop.setOnFinished(e -> scheduleNextColorShift());
+        colorLoop.play();
     }
 }

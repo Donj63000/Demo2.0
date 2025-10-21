@@ -38,12 +38,15 @@ public class Theme {
     }
 
     public static void styleListView(ListView<?> lv) {
-        lv.setStyle("-fx-control-inner-background:#1e1e1e;-fx-background-insets:0;-fx-selection-bar:" + toWebColor(ACCENT) + ";-fx-selection-bar-non-focused:" + toWebColor(ACCENT.darker()) + ";");
+        if (!lv.getStyleClass().contains("app-list-view")) {
+            lv.getStyleClass().add("app-list-view");
+        }
     }
 
     public static void styleTableView(TableView<?> tv) {
-        styleControl(tv);
-        tv.setStyle(tv.getStyle() + "-fx-table-cell-border-color: transparent;-fx-table-header-border-color: transparent;-fx-border-color: transparent;");
+        if (!tv.getStyleClass().contains("app-table-view")) {
+            tv.getStyleClass().add("app-table-view");
+        }
     }
 
     public static void styleControl(Control c) {

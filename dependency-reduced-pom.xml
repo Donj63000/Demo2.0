@@ -85,9 +85,9 @@
     <jpackage.winMenu>false</jpackage.winMenu>
     <java.version>21</java.version>
     <javafx.maven.plugin.version>0.0.8</javafx.maven.plugin.version>
+    <jpackage.winShortcut>false</jpackage.winShortcut>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <javafx.version>21.0.2</javafx.version>
     <jpackage.imageType>APP_IMAGE</jpackage.imageType>
-    <jpackage.winShortcut>false</jpackage.winShortcut>
   </properties>
 </project>

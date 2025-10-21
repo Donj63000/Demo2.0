@@ -1,50 +1,346 @@
 .app-button {
-    -fx-background-radius: 18;
-    -fx-background-insets: 0, 1, 2;
+    -fx-background-radius: 26;
+    -fx-border-radius: 26;
+    -fx-background-insets: 0;
+    -fx-border-width: 1.4;
+    -fx-border-color: rgba(255,255,255,0.35);
     -fx-padding: 12 32;
-    -fx-font-family: "Arial";
-    -fx-font-weight: bold;
+    -fx-font-family: "Poppins";
+    -fx-font-weight: 700;
     -fx-font-size: 15px;
     -fx-text-fill: white;
     -fx-text-alignment: center;
     -fx-alignment: center;
     -fx-cursor: hand;
     -fx-background-color:
-        linear-gradient(to bottom, #00f2fe, #4facfe),
-        linear-gradient(to bottom, rgba(255,255,255,.35), rgba(255,255,255,.15)),
-        linear-gradient(to bottom, rgba(0,0,0,.05), rgba(0,0,0,.15));
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,.35), 12, 0.35, 0, 2);
+        linear-gradient(to bottom, rgba(255,255,255,0.28), rgba(255,255,255,0.06)),
+        linear-gradient(to bottom, rgba(79,172,254,0.95), rgba(0,242,254,0.9)),
+        linear-gradient(to bottom, rgba(2,21,60,0.55), rgba(2,21,60,0.85));
+    -fx-effect: dropshadow(gaussian, rgba(9,20,52,0.55), 22, 0.55, 0, 6);
+    -fx-graphic-text-gap: 10;
 }
 
 .app-button:hover {
     -fx-background-color:
-        linear-gradient(to bottom, #56f1ff, #66bcff),
-        linear-gradient(to bottom, rgba(255,255,255,.45), rgba(255,255,255,.20)),
-        linear-gradient(to bottom, rgba(0,0,0,.03), rgba(0,0,0,.08));
+        linear-gradient(to bottom, rgba(255,255,255,0.42), rgba(255,255,255,0.12)),
+        linear-gradient(to bottom, rgba(117,209,255,0.95), rgba(102,162,255,0.92)),
+        linear-gradient(to bottom, rgba(2,21,60,0.5), rgba(2,21,60,0.75));
+    -fx-effect: dropshadow(gaussian, rgba(60,130,255,0.7), 26, 0.65, 0, 6);
+    -fx-translate-y: -1;
 }
 
 .app-button:armed {
-    -fx-background-insets: 2, 1, 0;
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(255,255,255,0.18), rgba(255,255,255,0.04)),
+        linear-gradient(to bottom, rgba(32,142,221,0.9), rgba(42,118,255,0.92)),
+        linear-gradient(to bottom, rgba(2,21,60,0.65), rgba(2,21,60,0.9));
     -fx-translate-y: 1;
 }
 
 .app-button:focused {
-    -fx-effect: dropshadow(gaussian, rgba(79,172,254,.8), 14, 0.7, 0, 0);
+    -fx-effect: dropshadow(gaussian, rgba(102,196,255,0.85), 30, 0.7, 0, 0);
 }
 
 .app-button:disabled {
-    -fx-opacity: .6;
+    -fx-opacity: 0.55;
     -fx-effect: none;
+    -fx-border-color: rgba(255,255,255,0.15);
 }
 
 .app-button.primary {
     -fx-font-size: 16px;
-    -fx-padding: 14 34;
+    -fx-padding: 14 36;
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(255,255,255,0.34), rgba(255,255,255,0.14)),
+        linear-gradient(to bottom, #8a7dff, #4d5dff),
+        linear-gradient(to bottom, rgba(12,22,78,0.65), rgba(12,22,78,0.9));
+}
+
+.app-button.primary:hover {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(255,255,255,0.48), rgba(255,255,255,0.16)),
+        linear-gradient(to bottom, #a28fff, #6d78ff),
+        linear-gradient(to bottom, rgba(12,22,78,0.55), rgba(12,22,78,0.85));
 }
 
 .app-button.danger {
     -fx-background-color:
-        linear-gradient(to bottom, #ff8a80, #ff3d00),
-        linear-gradient(to bottom, rgba(255,255,255,.35), rgba(255,255,255,.15)),
-        linear-gradient(to bottom, rgba(0,0,0,.05), rgba(0,0,0,.15));
+        linear-gradient(to bottom, rgba(255,255,255,0.28), rgba(255,255,255,0.08)),
+        linear-gradient(to bottom, #ff7a7a, #ff3b3b),
+        linear-gradient(to bottom, rgba(60,0,10,0.65), rgba(60,0,10,0.9));
+}
+
+.app-button.danger:hover {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(255,255,255,0.42), rgba(255,255,255,0.12)),
+        linear-gradient(to bottom, #ff9a9a, #ff5959),
+        linear-gradient(to bottom, rgba(60,0,10,0.55), rgba(60,0,10,0.85));
+}
+
+.app-table-view {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(10,24,50,0.82), rgba(6,12,28,0.9));
+    -fx-background-radius: 18;
+    -fx-background-insets: 0;
+    -fx-border-color: rgba(111,185,255,0.55);
+    -fx-border-width: 1.4;
+    -fx-border-radius: 18;
+    -fx-padding: 12;
+    -fx-table-header-border-color: transparent;
+    -fx-table-cell-border-color: transparent;
+    -fx-effect: dropshadow(gaussian, rgba(4,10,25,0.55), 26, 0.55, 0, 6);
+}
+
+.app-table-view:focused {
+    -fx-border-color: rgba(131,205,255,0.85);
+    -fx-effect: dropshadow(gaussian, rgba(92,170,255,0.75), 30, 0.65, 0, 8);
+}
+
+.app-table-view .column-header-background {
+    -fx-background-color:
+        linear-gradient(to right, rgba(90,160,255,0.35), rgba(120,90,255,0.35));
+    -fx-padding: 0 0 10 0;
+    -fx-background-radius: 14 14 0 0;
+}
+
+.app-table-view .column-header, .app-table-view .filler {
+    -fx-padding: 8 12;
+    -fx-background-color: transparent;
+}
+
+.app-table-view .column-header .label {
+    -fx-text-fill: rgba(236,243,255,0.95);
+    -fx-font-family: "Poppins";
+    -fx-font-weight: 600;
+    -fx-font-size: 14px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 6, 0.6, 0, 1);
+}
+
+.app-table-view .table-row-cell {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 6 10;
+    -fx-cell-size: 42px;
+}
+
+.app-table-view .table-row-cell:filled:odd {
+    -fx-background-color: rgba(12,22,44,0.68);
+}
+
+.app-table-view .table-row-cell:filled:even {
+    -fx-background-color: rgba(8,14,32,0.58);
+}
+
+.app-table-view .table-row-cell:hover {
+    -fx-background-color: rgba(75,146,255,0.25);
+}
+
+.app-table-view .table-row-cell:selected {
+    -fx-background-color: linear-gradient(to right, rgba(82,146,255,0.65), rgba(143,92,255,0.55));
+    -fx-text-fill: white;
+}
+
+.app-table-view .table-row-cell:focused {
+    -fx-border-color: rgba(173,215,255,0.65);
+    -fx-border-width: 0 0 0 2;
+}
+
+.app-table-view .table-cell {
+    -fx-text-fill: rgba(236,243,255,0.96);
+    -fx-font-family: "Poppins";
+    -fx-font-size: 14px;
+    -fx-alignment: CENTER_LEFT;
+    -fx-padding: 4 10;
+}
+
+.app-table-view .table-cell:filled:selected {
+    -fx-text-fill: white;
+    -fx-font-weight: 600;
+}
+
+.app-table-view .table-row-cell:empty {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.app-table-view .scroll-bar:vertical, .app-table-view .scroll-bar:horizontal {
+    -fx-background-color: rgba(0,0,0,0.15);
+}
+
+.app-table-view .scroll-bar:vertical .thumb, .app-table-view .scroll-bar:horizontal .thumb {
+    -fx-background-color: linear-gradient(to bottom, rgba(120,180,255,0.75), rgba(80,120,255,0.75));
+    -fx-background-radius: 9;
+}
+
+.app-table-view .scroll-bar .increment-button, .app-table-view .scroll-bar .decrement-button {
+    -fx-padding: 0;
+    -fx-background-color: transparent;
+}
+
+.app-table-view .placeholder .label {
+    -fx-text-fill: rgba(210,220,240,0.65);
+    -fx-font-style: italic;
+}
+
+.app-table-view .check-box {
+    -fx-padding: 0;
+    -fx-cursor: hand;
+}
+
+.app-table-view .check-box .box {
+    -fx-background-color: rgba(20,32,60,0.85);
+    -fx-border-color: rgba(130,195,255,0.75);
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+}
+
+.app-table-view .check-box:selected .box {
+    -fx-background-color: linear-gradient(to bottom, rgba(120,200,255,0.95), rgba(60,120,255,0.9));
+    -fx-border-color: rgba(200,240,255,0.9);
+}
+
+.app-table-view .check-box .mark {
+    -fx-background-color: white;
+}
+
+.app-list-view {
+    -fx-background-color: rgba(12,24,48,0.72);
+    -fx-background-insets: 0;
+    -fx-background-radius: 16;
+    -fx-border-color: rgba(110,180,255,0.45);
+    -fx-border-radius: 16;
+    -fx-border-width: 1.2;
+    -fx-padding: 6;
+}
+
+.app-list-view:focused {
+    -fx-border-color: rgba(150,210,255,0.8);
+    -fx-effect: dropshadow(gaussian, rgba(92,170,255,0.6), 20, 0.55, 0, 4);
+}
+
+.app-list-view .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: rgba(230,240,255,0.92);
+    -fx-font-family: "Poppins";
+    -fx-font-size: 13.5px;
+    -fx-padding: 6 10;
+}
+
+.app-list-view .list-cell:filled:odd {
+    -fx-background-color: rgba(16,32,64,0.42);
+}
+
+.app-list-view .list-cell:filled:even {
+    -fx-background-color: rgba(8,18,38,0.36);
+}
+
+.app-list-view .list-cell:hover {
+    -fx-background-color: rgba(110,185,255,0.28);
+}
+
+.app-list-view .list-cell:selected {
+    -fx-background-color: linear-gradient(to right, rgba(110,185,255,0.75), rgba(170,110,255,0.6));
+    -fx-text-fill: white;
+    -fx-font-weight: 600;
+}
+
+.app-list-view .list-cell:empty {
+    -fx-background-color: transparent;
+}
+
+.app-list-view .scroll-bar:vertical .thumb, .app-list-view .scroll-bar:horizontal .thumb {
+    -fx-background-color: linear-gradient(to bottom, rgba(140,205,255,0.75), rgba(94,140,255,0.75));
+    -fx-background-radius: 9;
+}
+
+.app-list-view .scroll-bar:vertical, .app-list-view .scroll-bar:horizontal {
+    -fx-background-color: transparent;
+}
+
+.app-list-view .placeholder .label,
+.list-placeholder {
+    -fx-text-fill: rgba(210,220,240,0.65);
+    -fx-font-style: italic;
+}
+
+.app-list-cell {
+    -fx-font-family: "Poppins";
+    -fx-font-size: 13.5px;
+}
+
+.side-panel {
+    -fx-spacing: 18;
+}
+
+.side-card,
+.pot-card {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(14,30,64,0.9), rgba(8,16,34,0.95));
+    -fx-background-radius: 20;
+    -fx-border-radius: 20;
+    -fx-border-color: rgba(120,190,255,0.45);
+    -fx-border-width: 1.2;
+    -fx-padding: 18 22;
+    -fx-effect: dropshadow(gaussian, rgba(4,12,32,0.55), 26, 0.55, 0, 6);
+}
+
+.pot-card {
+    -fx-background-color:
+        linear-gradient(to bottom right, rgba(130,200,255,0.65), rgba(90,70,255,0.95)),
+        linear-gradient(to bottom, rgba(8,18,38,0.85), rgba(6,12,28,0.95));
+    -fx-border-color: rgba(210,238,255,0.9);
+}
+
+.pot-card-title {
+    -fx-text-fill: rgba(220,235,255,0.9);
+    -fx-font-family: "Poppins";
+    -fx-font-size: 15px;
+    -fx-font-weight: 600;
+    -fx-letter-spacing: 0.6px;
+}
+
+.pot-card-value {
+    -fx-text-fill: white;
+    -fx-font-family: "Poppins";
+    -fx-font-size: 36px;
+    -fx-font-weight: 800;
+    -fx-effect:
+        dropshadow(gaussian, rgba(5,12,28,0.75), 34, 0.78, 0, 6),
+        innershadow(gaussian, rgba(255,255,255,0.25), 14, 0.8, 0, 0),
+        bloom(0.25);
+}
+
+.pot-card-subtitle {
+    -fx-text-fill: rgba(225,235,255,0.8);
+    -fx-font-family: "Poppins";
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+    -fx-letter-spacing: 0.4px;
+}
+
+.side-card-title {
+    -fx-text-fill: rgba(220,235,255,0.95);
+    -fx-font-family: "Poppins";
+    -fx-font-size: 15px;
+    -fx-font-weight: 600;
+    -fx-letter-spacing: 0.5px;
+}
+
+.bonus-row {
+    -fx-spacing: 8;
+}
+
+.bonus-row .button {
+    -fx-min-width: 96px;
+}
+
+.bonus-field {
+    -fx-pref-width: 100px;
+    -fx-alignment: CENTER_RIGHT;
+    -fx-font-family: "Poppins";
+    -fx-font-size: 14px;
+}
+
+.object-field {
+    -fx-pref-width: 220px;
 }

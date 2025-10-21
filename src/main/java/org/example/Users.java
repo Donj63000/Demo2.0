@@ -119,8 +119,12 @@ public class Users {
             return next.matches("[0-9kKmMgG., _\u00A0]*") ? change : null;
         }));
 
-        Button add = new Button("Ajouter");   Theme.styleButton(add);
-        Button del = new Button("Supprimer"); Theme.styleButton(del);
+        Button add = new Button("Ajouter");
+        Theme.styleButton(add);
+        add.setFocusTraversable(false);
+        Button del = new Button("Supprimer");
+        Theme.styleButton(del);
+        del.setFocusTraversable(false);
 
         HBox inputRow = new HBox(6, tNom, tKamas, tDon);
         inputRow.setAlignment(Pos.CENTER_LEFT);

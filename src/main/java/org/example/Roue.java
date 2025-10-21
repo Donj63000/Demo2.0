@@ -51,6 +51,7 @@ public class Roue {
     private Color[]  seatColors;
 
     private Timeline rainbowLoop;
+    private ScaleTransition winnerPulse;
     private Consumer<String>   spinCallback;
 
     private double dragX, dragY;
@@ -66,6 +67,7 @@ public class Roue {
         wheelGroup = new Group();
         wheelGroup.setCache(true);
         wheelGroup.setCacheHint(CacheHint.ROTATE);
+        wheelGroup.setEffect(new DropShadow(40, Color.color(0, 0, 0, 0.55)));
         root.getChildren().add(wheelGroup);
 
         enableDrag();
@@ -129,30 +131,64 @@ public class Roue {
     }
 
     private void highlightWinner(int idx){
-        if(idx<0||idx>=arcs.size()) return;
+        if(idx<0||idx>=arcs.size()) {
+            return;
+        }
         Arc a = arcs.get(idx);
 
-        a.setStrokeWidth(SECTOR_BORDER_W*2);
-        a.setEffect(new Glow(.8));
+        a.setStrokeWidth(SECTOR_BORDER_W * 2);
+        a.setStroke(Color.color(1, 1, 1, 0.85));
+        a.setEffect(new Glow(.85));
+        a.setScaleX(1);
+        a.setScaleY(1);
 
+        if (winnerPulse != null) {
+            winnerPulse.stop();
+        }
+        winnerPulse = new ScaleTransition(Duration.seconds(1.2), a);
+        winnerPulse.setFromX(1.0);
+        winnerPulse.setFromY(1.0);
+        winnerPulse.setToX(1.04);
+        winnerPulse.setToY(1.04);
+        winnerPulse.setAutoReverse(true);
+        winnerPulse.setCycleCount(Animation.INDEFINITE);
+        winnerPulse.play();
+
+        if (rainbowLoop != null) {
+            rainbowLoop.stop();
+        }
         rainbowLoop = new Timeline();
-        double durationS = 1.5;
-        int    steps     = 20;
+        double durationS = 1.6;
+        int    steps     = 24;
         for(int i=0;i<=steps;i++){
             double frac = (double)i/steps;
-            Color col = Color.hsb(frac*360,1,1);
+            Color col = Color.hsb(frac * 360, 0.85, 1.0);
             rainbowLoop.getKeyFrames().add(
-                    new KeyFrame(Duration.seconds(frac*durationS),
+                    new KeyFrame(Duration.seconds(frac * durationS),
                             new KeyValue(a.fillProperty(), col),
                             new KeyValue(a.strokeProperty(), col))
             );
         }
+        rainbowLoop.setAutoReverse(true);
         rainbowLoop.setCycleCount(Animation.INDEFINITE);
         rainbowLoop.play();
     }
     private void stopHighlight(){
-        if(rainbowLoop!=null) rainbowLoop.stop();
-        arcs.forEach(x->{ x.setEffect(null); x.setStroke(SECTOR_BORDER); x.setStrokeWidth(SECTOR_BORDER_W); });
+        if(rainbowLoop!=null) {
+            rainbowLoop.stop();
+            rainbowLoop = null;
+        }
+        if (winnerPulse != null) {
+            winnerPulse.stop();
+            winnerPulse = null;
+        }
+        arcs.forEach(x->{
+            x.setEffect(null);
+            x.setStroke(SECTOR_BORDER);
+            x.setStrokeWidth(SECTOR_BORDER_W);
+            x.setScaleX(1);
+            x.setScaleY(1);
+        });
     }
 
     private void startSpinSound() {
@@ -221,6 +257,22 @@ public class Roue {
         ));
         accentRing.setStrokeWidth(4);
 
+        Circle neonRing = new Circle(Main.WHEEL_RADIUS + 14, Color.TRANSPARENT);
+        neonRing.setStroke(new LinearGradient(
+                0, 0, 1, 0, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Color.web("#5fa8ff")),
+                new Stop(0.5, Color.web("#a36bff")),
+                new Stop(1, Color.web("#5fa8ff"))
+        ));
+        neonRing.setStrokeWidth(3.2);
+        neonRing.setEffect(new Glow(0.45));
+
+        Circle sparkleRing = new Circle(Main.WHEEL_RADIUS - 32, Color.TRANSPARENT);
+        sparkleRing.setStroke(Color.color(1, 1, 1, 0.16));
+        sparkleRing.setStrokeWidth(1.4);
+        sparkleRing.getStrokeDashArray().addAll(14.0, 10.0);
+        sparkleRing.setEffect(new DropShadow(12, Color.color(0.2, 0.55, 1.0, 0.6)));
+
         Circle innerGlow = new Circle(Main.WHEEL_RADIUS - 18,
                 new RadialGradient(0, 0, 0.3, 0.3, 1.0, true, CycleMethod.NO_CYCLE,
                         new Stop(0, Color.color(1, 1, 1, 0.18)),
@@ -229,27 +281,40 @@ public class Roue {
 
         Group rivets = buildRivetRing(18, Main.WHEEL_RADIUS + 4);
 
-        rings.getChildren().addAll(baseShadow, outerRim, accentRing, rivets, innerGlow);
+        rings.getChildren().addAll(
+                baseShadow,
+                outerRim,
+                neonRing,
+                accentRing,
+                sparkleRing,
+                rivets,
+                innerGlow
+        );
         wheelGroup.getChildren().add(rings);
     }
     private Arc buildSector(double start,double extent,Color base,boolean loser){
         Arc arc = new Arc(0,0, Main.WHEEL_RADIUS, Main.WHEEL_RADIUS, start, extent);
         arc.setType(ArcType.ROUND);
 
+        Color highlight = base.interpolate(Color.WHITE, 0.28);
+        Color shadow = base.interpolate(Color.BLACK, 0.18);
+
         Paint p = loser
                 ? new LinearGradient(
                         0, 0, 1, 1, true, CycleMethod.NO_CYCLE,
-                        new Stop(0, Color.rgb(70, 70, 70)),
-                        new Stop(1, Color.rgb(25, 25, 25))
+                        new Stop(0, Color.rgb(55, 55, 55)),
+                        new Stop(0.5, Color.rgb(35, 35, 35)),
+                        new Stop(1, Color.rgb(20, 20, 20))
                 )
                 : new LinearGradient(0,0,1,1,true,CycleMethod.NO_CYCLE,
-                new Stop(0, base.brighter()),
+                new Stop(0, highlight),
                 new Stop(.45, base),
-                new Stop(1, base.darker()));
+                new Stop(1, shadow));
 
         arc.setFill(p);
         arc.setStroke(SECTOR_BORDER);
         arc.setStrokeWidth(SECTOR_BORDER_W);
+        arc.setOpacity(loser ? 0.85 : 0.97);
         return arc;
     }
     private Node buildHub(){
@@ -330,4 +395,5 @@ public class Roue {
         rivets.setMouseTransparent(true);
         return rivets;
     }
+
 }

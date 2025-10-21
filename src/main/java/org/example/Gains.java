@@ -7,12 +7,13 @@ import javafx.beans.property.SimpleIntegerProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
-import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-
 import javafx.beans.value.ChangeListener;
 
 import java.util.IdentityHashMap;
@@ -44,31 +45,49 @@ public class Gains {
 
         /* ========== 1) CAGNOTTE ========== */
         txtExtra = new TextField("0");
-        txtExtra.setPrefWidth(56);
+        txtExtra.setPrefWidth(90);
         Theme.styleTextField(txtExtra);
+        txtExtra.getStyleClass().add("bonus-field");
         txtExtra.setTextFormatter(new TextFormatter<>(change -> {
             String next = change.getControlNewText();
             return next.matches("[0-9kKmMgG., _\u00A0]*") ? change : null;
         }));
 
         lblTotal = new Label();
-        Theme.styleCapsuleLabel(lblTotal, "#4facfe", "#00f2fe");
+        lblTotal.getStyleClass().add("pot-card-value");
+
+        Label lblPotTitle = new Label("Cagnotte");
+        lblPotTitle.getStyleClass().add("pot-card-title");
+
+        Label lblCarry = new Label();
+        lblCarry.getStyleClass().add("pot-card-subtitle");
 
         lblTotal.textProperty().bind(
                 Bindings.createStringBinding(
-                        () -> "Cagnotte : " + Kamas.formatFr(totalKamas.get()) + " k",
+                        () -> Kamas.formatFr(totalKamas.get()) + " k",
                         totalKamas
+                )
+        );
+        lblCarry.textProperty().bind(
+                Bindings.createStringBinding(
+                        () -> "Bonus manuel : " + Kamas.formatFr(extraKamas.get()) + " k",
+                        extraKamas
                 )
         );
         extraKamas.addListener((obs, oldVal, newVal) -> recomputeTotal());
         carryOver.addListener((obs, oldVal, newVal) -> recomputeTotal());
 
-        // Bouton : ajoute le montant du champ à la cagnote
+        VBox potContent = new VBox(2, lblPotTitle, lblTotal, lblCarry);
+        potContent.setAlignment(Pos.CENTER_LEFT);
+        StackPane potCard = new StackPane(potContent);
+        StackPane.setAlignment(potContent, Pos.CENTER_LEFT);
+        potCard.getStyleClass().add("pot-card");
+        potCard.setMaxWidth(Double.MAX_VALUE);
+
         Button btnAddKamas = new Button("Ajouter");
         Theme.styleButton(btnAddKamas);
         btnAddKamas.setOnAction(e -> applyBonusDelta(true));
 
-        // Bouton : supprime le montant complémentaire
         Button btnRemoveKamas = new Button("Supprimer");
         Theme.styleButton(btnRemoveKamas);
         btnRemoveKamas.setOnAction(e -> applyBonusDelta(false));
@@ -79,15 +98,33 @@ public class Gains {
         btnResetBonus.disableProperty().bind(extraKamas.isEqualTo(0));
         btnResetBonus.setOnAction(e -> resetBonusWithConfirmation());
 
-        HBox bonusButtons = new HBox(10, btnAddKamas, btnRemoveKamas, btnResetBonus);
+        Label bonusTitle = new Label("Bonus manuel");
+        bonusTitle.getStyleClass().add("side-card-title");
+
+        HBox bonusButtons = new HBox(8, txtExtra, btnAddKamas, btnRemoveKamas);
+        bonusButtons.getStyleClass().add("bonus-row");
+        bonusButtons.setAlignment(Pos.CENTER_LEFT);
+
+        VBox bonusCard = new VBox(10, bonusTitle, bonusButtons, btnResetBonus);
+        bonusCard.getStyleClass().add("side-card");
+        bonusCard.setAlignment(Pos.CENTER_LEFT);
+        btnResetBonus.setMaxWidth(Double.MAX_VALUE);
+        bonusCard.setMaxWidth(Double.MAX_VALUE);
 
         /* ========== 2) OBJETS ========== */
         listView = new ListView<>(objets);
-        listView.setPrefSize(150, 240);
+        listView.setPrefWidth(220);
+        listView.setPrefHeight(190);
+        listView.setMaxHeight(220);
+        listView.setFixedCellSize(36);
         Theme.styleListView(listView);
+        listView.setFocusTraversable(false);
 
-        // Gros, vert
         listView.setCellFactory(lv -> new ListCell<>() {
+            {
+                getStyleClass().add("app-list-cell");
+            }
+
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
@@ -95,18 +132,23 @@ public class Gains {
                     setText(null);
                 } else {
                     setText(item);
-                    setStyle("-fx-font-size: 15px; -fx-text-fill: green;");
                 }
             }
         });
 
-        // Saisie / ajout / suppression d'objets
+        Label placeholder = new Label("Aucun lot pour l'instant");
+        placeholder.getStyleClass().add("list-placeholder");
+        listView.setPlaceholder(placeholder);
+
         TextField txtNew = new TextField();
         txtNew.setPromptText("Nouvel objet…");
         Theme.styleTextField(txtNew);
+        txtNew.getStyleClass().add("object-field");
+        txtNew.setMaxWidth(Double.MAX_VALUE);
 
         Button btnAdd = new Button("Ajouter");
         Theme.styleButton(btnAdd);
+        btnAdd.setFocusTraversable(false);
         btnAdd.setOnAction(e -> {
             String v = txtNew.getText().trim();
             if (!v.isEmpty()) {
@@ -117,6 +159,7 @@ public class Gains {
 
         Button btnDel = new Button("Supprimer");
         Theme.styleButton(btnDel);
+        btnDel.setFocusTraversable(false);
         btnDel.setOnAction(e -> {
             String sel = listView.getSelectionModel().getSelectedItem();
             if (sel != null) {
@@ -124,10 +167,9 @@ public class Gains {
             }
         });
 
-        Label lblObjets = new Label("Objets :");
-        Theme.styleCapsuleLabel(lblObjets, "#ff9a9e", "#fad0c4");
+        Label lblObjets = new Label("Objets & lots");
+        lblObjets.getStyleClass().add("side-card-title");
 
-        // Mise à jour auto depuis les participants
         participants.addListener((ListChangeListener<Participant>) change -> {
             while (change.next()) {
                 if (change.wasAdded()) {
@@ -144,20 +186,23 @@ public class Gains {
         refreshObjets();
         recomputeTotal();
 
-        VBox objetsBox = new VBox(5, lblObjets, listView, txtNew, btnAdd, btnDel);
-        objetsBox.setPadding(new Insets(6, 0, 0, 0));
+        HBox objetsActions = new HBox(8, btnAdd, btnDel);
+        objetsActions.getStyleClass().add("bonus-row");
+        objetsActions.setAlignment(Pos.CENTER_LEFT);
 
-        VBox vbKamas = new VBox(5,
-                txtExtra,
-                bonusButtons
-        );
+        VBox objetsCard = new VBox(10, lblObjets, listView, txtNew, objetsActions);
+        objetsCard.getStyleClass().add("side-card");
+        objetsCard.setAlignment(Pos.CENTER_LEFT);
+        objetsCard.setMaxWidth(Double.MAX_VALUE);
+        VBox.setVgrow(listView, Priority.ALWAYS);
 
-        root = new VBox(8,
-                lblTotal,
-                vbKamas,
-                new Separator(),
-                objetsBox
+        root = new VBox(18,
+                potCard,
+                bonusCard,
+                objetsCard
         );
+        root.getStyleClass().add("side-panel");
+        root.setFillWidth(true);
     }
 
     private void applyBonusDelta(boolean add) {
