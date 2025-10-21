@@ -37,6 +37,10 @@ public class Main extends Application {
     // Durée du spin
     public static final double SPIN_DURATION = 5.0; // en secondes
 
+    private Stage primaryStage;
+    private BorderPane rootPane;
+    private Scene scene;
+
     private DonationsLedger donationsLedger;
     private Integer currentRoundId;
     private Users users;
@@ -50,8 +54,10 @@ public class Main extends Application {
 
     @Override
     public void start(Stage primaryStage) {
+        this.primaryStage = primaryStage;
         // Root principal
-        BorderPane root = new BorderPane();
+        this.rootPane = new BorderPane();
+        BorderPane root = rootPane;
 
         // === 1) Titre + Résultat (en haut) ===
         Titre bandeau = new Titre();
@@ -172,6 +178,8 @@ public class Main extends Application {
         optionsButton.setOnAction(e -> {
             OptionRoue optWin = new OptionRoue();
             optWin.showAndWait();
+            applyUiScale();
+            primaryStage.centerOnScreen();
             roue.updateWheelDisplay(users.getParticipantNames());
         });
 
@@ -326,17 +334,48 @@ public class Main extends Application {
         root.setBottom(bottomBox);
 
         // === 6) Scène + Stage ===
-        Scene scene = new Scene(root, SCENE_WIDTH, SCENE_HEIGHT);
+        scene = new Scene(rootPane, SCENE_WIDTH, SCENE_HEIGHT);
         scene.getStylesheets().add(
                 Objects.requireNonNull(getClass().getResource("/app.css")).toExternalForm()
         );
         primaryStage.setTitle("Loterie de la guilde Evolution [By Coca]");
         primaryStage.setScene(scene);
+        applyUiScale();
 
         // -> Optionnel : enlever l'indication pour quitter le fullscreen
         // primaryStage.setFullScreenExitHint("");
 
         primaryStage.show();
+        primaryStage.centerOnScreen();
+    }
+
+    private void applyUiScale() {
+        if (rootPane == null || primaryStage == null) {
+            return;
+        }
+        double requestedScale = OptionRoue.isAdaptLargeScreens() ? OptionRoue.getUiScale() : 1.0;
+        double scale = Math.max(1.0, requestedScale);
+        var bounds = javafx.stage.Screen.getPrimary().getVisualBounds();
+        double marginW = 40;
+        double marginH = 80;
+        if (bounds != null) {
+            double maxScaleW = (bounds.getWidth() - marginW) / SCENE_WIDTH;
+            double maxScaleH = (bounds.getHeight() - marginH) / SCENE_HEIGHT;
+            double maxScale = Math.min(maxScaleW, maxScaleH);
+            if (Double.isFinite(maxScale) && maxScale > 0) {
+                scale = Math.min(scale, Math.max(1.0, maxScale));
+            }
+        }
+        rootPane.setScaleX(scale);
+        rootPane.setScaleY(scale);
+        double width = SCENE_WIDTH * scale;
+        double height = SCENE_HEIGHT * scale;
+        double windowWidth = width + marginW;
+        double windowHeight = height + marginH;
+        primaryStage.setMinWidth(windowWidth);
+        primaryStage.setMinHeight(windowHeight);
+        primaryStage.setWidth(windowWidth);
+        primaryStage.setHeight(windowHeight);
     }
 
     private void attachParticipationListener(Participant participant) {
