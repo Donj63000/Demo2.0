@@ -1,0 +1,202 @@
+NOTICE UTILISATEUR - DemoLoterie
+================================
+
+1. Objectif du programme
+------------------------
+DemoLoterie est un simulateur de loterie autonome concu pour animer des evenements de guilde. Il permet de :
+- collecter les mises versees par les participants (kamas ou objets),
+- visualiser graphiquement une roue aleatoire et lancer des tirages interactifs,
+- annoncer automatiquement le resultat d’un tour et notifier le gagnant,
+- conserver une trace comptable de tous les tours joues (CSV et historique texte),
+- sauvegarder/restaurer la configuration entre deux sessions.
+Aucune connexion Internet ni competences techniques ne sont requises une fois le binaire fourni.
+
+2. Prerequis indispensables
+---------------------------
+- **Java 21 ou plus recent.** Sur Windows, un installateur natif peut etre fourni et inclut son propre runtimes. Sinon, telechargez Java depuis https://adoptium.net/ ou https://www.oracle.com/java/.
+- **Espace disque.** Prevoir au moins 200 Mo libres pour le jar et les fichiers de donnees.
+- **Acces en lecture/écriture** dans le dossier contenant l’application afin de pouvoir sauvegarder les fichiers `loterie-*.txt` et `loterie-dons.csv`.
+- **Optionnel :** un ecran 1080p ou plus pour un meilleur confort.
+
+Pour verifier que Java est correctement installe, ouvrez un terminal (cmd sous Windows, Terminal sur macOS/Linux) et tapez :
+```
+java -version
+```
+La commande doit afficher une version 21 (ou ulterieure).
+
+3. Preparer votre dossier de travail
+------------------------------------
+1. Creer un dossier dedie (exemple : `C:\DemoLoterie` ou `~/DemoLoterie`).
+2. Copiez-y :
+   - le fichier `demoloterie.jar` (ou l’executable Windows si fourni),
+   - les fichiers de donnees existants, si vous souhaitez reprendre une partie (`loterie-save.txt`, `loterie-dons.csv`, `loterie-historique.txt`),
+   - eventuellement une image ou un document de presentation si vous faites une diffusion.
+3. (Conseil) Creez un sous-dossier `Archives` pour y ranger vos sauvegardes periodiques.
+
+Lorsqu’aucun fichier de donnees n’est present, l’application demarre sur une configuration vierge.
+
+4. Lancer le programme
+----------------------
+- **Windows (jar) :** double-cliquez sur `demoloterie.jar`. Si rien ne se passe, clic droit > “Ouvrir avec” > `Java(TM) Platform SE binary`, ou lancez manuellement la commande `java -jar demoloterie.jar`.
+- **Windows (installateur) :** lancez `DemoLoterie.exe`, suivez l’assistant, puis utilisez le raccourci cree dans le menu Demarrer.
+- **macOS / Linux :** ouvrez un terminal dans le dossier, tapez `java -jar demoloterie.jar`.
+
+Au premier lancement, la fenetre principale s’ouvre sur un ecran sombre avec le titre “Grande Loterie de la guilde Evolution [By Coca]”.
+
+5. Navigation generale dans l’interface
+---------------------------------------
+L’interface est organisee en quatre zones :
+- **Haut (bandeau et resultat)** : affiche le nom de la loterie et la pastille “Resultat : …” qui resume le dernier tirage (gagnant, montant ou echec).
+- **Colonne gauche (participants)** :
+  - bouton `Historique` ouvrant la fenetre de suivi des tours,
+  - tableau principal des participants avec les colonnes :
+    - `Rejoue ?` : determine si le joueur reste dans la loterie pour la manche en cours,
+    - `Payé ?` : confirme que la mise a ete encaissee pour cette manche,
+    - `Nom` : pseudo du joueur,
+    - `Kamas` : mise totale cumulée sur la manche,
+    - `Don` : lot physique ou remarque eventuelle.
+  - formulaire d’ajout/suppression (champs `Pseudo`, `Kamas`, `Don` + boutons `Ajouter`/`Supprimer`).
+- **Centre (roue)** : visuel interactif de la roue. Vous pouvez cliquer-glisser pour la deplacer et utiliser `Reset Position` pour la recentrer.
+- **Colonne droite (gains)** :
+  - etiquette `Cagnotte` indiquant le pot actuel,
+  - champ pour un bonus manuel (ex : jack pot additionnel de la guilde),
+  - boutons pour `Ajouter`, `Supprimer` ou `Reinitialiser` le bonus,
+  - liste des objets donnes, alimentee automatiquement par la colonne `Don` ou manuellement.
+- **Bas (barre de commandes)** : `Lancer la roue !`, `Options...`, `Reset Position`, `Sauvegarder etat`, `Nettoyer`, `Plein ecran`.
+
+6. Gérer les participants en detail
+-----------------------------------
+- **Ajouter un joueur :**
+  1. Remplissez `Pseudo` (obligatoire).
+  2. Saisissez la mise de depart dans `Kamas`. Laissez vide pour appliquer la mise standard de 20 000 (modifiable manuellement ensuite).
+  3. Optionnel : renseignez un objet ou une note dans `Don`.
+  4. Cliquez sur `Ajouter`. Le joueur apparait en bas du tableau, coche par defaut sur `Rejoue ?` et decoche sur `Payé ?`.
+- **Modifier un joueur :**
+  - Double-cliquez sur une cellule (Nom, Kamas, Don) pour la rendre editable. Validez par Entrée.
+  - Cochez/décochez `Rejoue ?` pour inclure ou exclure un joueur du tirage.
+  - Cochez `Payé ?` quand la mise a ete reglee : la mise standard est automatiquement ajoutee dans la colonne `Kamas`. Re-decochez pour annuler (la mise est retiree).
+- **Supprimer un joueur :**
+  - Selectionnez la ligne et cliquez sur `Supprimer`. Cette action est immediate.
+- **Astuces de tri / lecture :**
+  - Les couleurs du tableau varient selon l’index pour faciliter le repérage.
+  - Cliquez sur l’entete d’une colonne pour trier temporairement.
+  - Pour reinitialiser toutes les mises a zero apres une session, utilisez le bouton `Nettoyer`.
+
+7. Construire et suivre la cagnotte
+-----------------------------------
+- La cagnotte correspond a la somme des `Kamas` des joueurs avec la case `Payé ?` cochee, plus le bonus manuel.
+- **Ajouter un bonus :**
+  1. Indiquez un montant (par exemple `5000` ou `50k`).
+  2. Cliquez sur `Ajouter`. Le bonus monte la cagnotte sans modifier les mises individuelles.
+- **Retirer un bonus :**
+  - Indiquez le montant a retirer puis cliquez sur `Supprimer`. Le systeme prend la valeur entree comme un delta.
+- **Reinitialiser le bonus :**
+  - Cliquez sur `Reinitialiser cagnotte`. Seul le bonus manuel retombe a zero. Les mises des joueurs restent intactes.
+- **Objets et lots :**
+  - Chaque texte non vide dans la colonne `Don` est copie dans la liste des objets.
+  - Ajoutez un objet unique via le champ `Nouvel objet…` et le bouton `Ajouter`.
+  - Selectionnez un objet puis `Supprimer` pour le retirer.
+- Le total est mis a jour en temps reel dans l’etiquette `Cagnotte`.
+
+8. Checklist avant de lancer la roue
+------------------------------------
+Avant chaque tirage, verifiez :
+- Au moins un participant est coche a la fois sur `Rejoue ?` et `Payé ?`.
+- La `Cagnotte` affiche un montant > 0.
+- Les joueurs absents sont decochees de `Rejoue ?`.
+- Les dons et bonus eventuels sont a jour.
+- Optionnel : cliquez sur `Sauvegarder etat` pour garder une trace de la configuration actuelle (utile en cas de coupure de courant).
+
+9. Tirage et suite immediate
+----------------------------
+1. Cliquez sur `Lancer la roue !`. Les boutons se grisent pour empecher les actions concurrentes.
+2. La roue lance une animation (musique si disponible). La duree correspond a la valeur definie dans `Options...`.
+3. Fin du tirage :
+   - **Gagnant** : la pastille `Resultat` affiche `Nom remporte X k !` (et les lots). Le journal `loterie-dons.csv` enregistre le versement et la cagnotte est remise a zero.
+   - **Case perdante** : message `Perdu ! Pot conserve...`. Le pot reste pour la prochaine manche; pensez a recocher `Payé ?` pour les joueurs qui reconduisent leur mise.
+4. Les cases `Payé ?` sont remises a false pour tous : demandez aux joueurs s’ils reconduisent leur participation.
+5. Eventuellement, notez le resultat dans un document externe ou faites une annonce vocale.
+
+10. Outils et commandes supplémentaires
+--------------------------------------
+- **Options...** :
+  - Nombre de tickets perdants (par defaut 100). Augmenter cette valeur reduit les chances de gain.
+  - Duree de rotation (secondes). Entrez un nombre > 0 (ex : 12 pour des tirages plus rapides).
+  - Validez pour enregistrer les changements; ils restent actifs pour les prochains lancements.
+- **Reset Position** : recentre la roue si vous l’avez décalée a la souris.
+- **Sauvegarder etat** : enregistre les participants, leurs mises, les objets et le bonus dans `loterie-save.txt`. A faire regulierement.
+- **Nettoyer** :
+  - Vide la liste des participants et des objets,
+  - remet a zero le bonus,
+  - reinitialise le journal `loterie-dons.csv` (garde seulement l’entete).
+  - Une boite de confirmation evite les effacements accidentels.
+- **Plein ecran** : bascule la fenetre en plein ecran. Utilisez la touche `Echap` (ou recliquez) pour revenir en mode fenetre.
+- **Historique** : ouvre la fenetre des tirages passes (voir section suivante).
+
+11. Exploiter la fenetre Historique
+----------------------------------
+- Accessible via le bouton `Historique` (colonne gauche).
+- Affiche la liste chronologique des tours avec date, gagnant et montant.
+- Double-cliquez sur un tour pour voir les details : pot total, bonus, gagnant, contributions individuelles, liste des participants admissibles.
+- Utilisez le bouton `Supprimer` pour retirer une ligne test ou corriger une erreur d’affichage (le journal CSV reste intact).
+- Les modifications sont automatiquement sauvegardees dans `loterie-historique.txt`. Gardez ce fichier avec l’application pour conserver la memoire des tirages.
+
+12. Fichiers generes et bon usage
+---------------------------------
+- `loterie-save.txt` :
+  - Sauvegarde de l’etat courant.
+  - Format lisible : sections `#Participants`, `#Objets`, `#Bonus`.
+  - Peut etre edite manuellement avec un editeur texte, mais faites une copie avant toute modification.
+- `loterie-dons.csv` :
+  - Journal comptable par tour (horodatage, numero de tour, type, joueur, montant).
+  - Compatible Excel/Google Sheets pour analyses ou audits.
+  - Ne supprimez pas l’entete `ts;round;type;player;amount`.
+- `loterie-historique.txt` :
+  - Resume des tirages pour consultation rapide.
+  - Chaque ligne encode le detail en Base64 pour conserver les caracteres speciaux.
+- Pensez a sauvegarder regulierement ces trois fichiers (copie locale et cloud).
+
+13. Memoire et cumul entre loteries
+-----------------------------------
+- **Pendant une meme session :** tant que vous ne cliquez pas sur `Nettoyer`, le programme conserve en memoire la liste des joueurs, leurs mises, les dons et le bonus courant. A chaque tirage, le journal `loterie-dons.csv` est mis a jour avec la liste des contributions et, en cas de victoire, le montant verse au gagnant.
+- **Cagnotte qui se cumule :** si un tour se termine sur `Perdu !`, aucun versement n’est enregistre; le montant reste en memoire et viendra s’ajouter aux mises suivantes. Lorsque vous relancez `Lancer la roue !`, le pot cumule est considere dans la nouvelle cagnotte.
+- **Entre plusieurs seances :** au demarrage, DemoLoterie lit `loterie-save.txt` (participants, dons, bonus) et recalcule automatiquement la cagnotte cumulative a partir de `loterie-dons.csv`. Ainsi, meme si tous les participants commencent a 0 dans la table, le pot reporte (carry-over) s’ajoute dans la zone `Cagnotte`.
+- **Repartir de zero :** l’action `Nettoyer` supprime la liste des joueurs et remet le journal `loterie-dons.csv` a son en-tete. Cette operation efface donc le carry-over. Pour continuer une loterie sur plusieurs soirees, ne cliquez pas sur `Nettoyer`; contentez-vous de fermer l’application normalement. Pensez a sauvegarder `loterie-save.txt` et `loterie-dons.csv` pour conserver la progression.
+- **Exporter / importer :** pour reprendre une loterie sur une autre machine, copiez `demoloterie.jar` (ou l’executable) ainsi que les trois fichiers de donnees. Au prochain lancement, le pot cumulatif et l’historique seront identiques.
+
+14. Raccourcis et confort d’utilisation
+---------------------------------------
+- **Deplacement de la roue** : clic prolongé + glisser. `Reset Position` recentre si besoin.
+- **Zoom plein ecran** : bouton `Plein ecran` ou touche `F11` sur certaines plateformes.
+- **Selection multiple dans le tableau** : utilisez `Ctrl` ou `Shift` pour selectionner plusieurs lignes avant d’appuyer sur `Supprimer`.
+- **Modification rapide des cases a cocher** : utilisez la touche Espace quand une cellule `Rejoue ?` ou `Payé ?` est selectionnee.
+- **Police d’affichage** : vous pouvez agrandir la fenetre manuellement pour lire tous les noms confortablement.
+
+15. Depannage
+-------------
+- **Le jar ne se lance pas :**
+  - Verifiez `java -version`.
+  - Sur Windows, si double-clic ne fait rien, lancez `java -jar demoloterie.jar` depuis `cmd`.
+  - Assurez-vous que le fichier n’est pas bloque par Windows (clic droit > Propriete > Debloquer).
+- **Messages d’erreur “Impossible de relire la sauvegarde” :**
+  - Ouvrez `loterie-save.txt` pour verifier qu’il n’est pas vide. Supprimez-le pour repartir de zero si besoin.
+- **La musique ne se joue pas :**
+  - Le son est optionnel. Assurez-vous que vos haut-parleurs fonctionnent ou ignorez simplement l’avertissement.
+- **Je ne vois pas mes anciens tours :**
+  - Copiez `loterie-historique.txt` et `loterie-dons.csv` de l’ancienne machine dans le dossier courant avant de lancer l’application.
+- **La cagnotte ne correspond pas aux mises :**
+  - Cochez uniquement les joueurs qui ont paye.
+  - Assurez-vous qu’aucun bonus n’est encore actif (`Reinitialiser cagnotte` si doute).
+- **Plantage inopine :**
+  - Relancez l’application; si le probleme persiste, envoyez les fichiers de log (`loterie-*.txt`) a la personne en charge ou restaurez une sauvegarde propre.
+
+16. Bonnes pratiques et organisation d’une session
+--------------------------------------------------
+- Dressez la liste des participants avant le depart, puis utilisez l’interface pour suivre en temps reel les mises.
+- Sauvegardez l’etat juste avant chaque tirage important.
+- Apres l’evenement, exportez `loterie-dons.csv` pour partager un compte-rendu transparent avec la guilde.
+- Utilisez un support visuel (projecteur, stream) pour afficher la roue pendant l’animation.
+- Gardez une copie sur cle USB ou cloud en fin de soiree pour prevenir toute perte de donnees.
+- Si vous changez de PC, deplacez simplement le dossier complet : les fichiers de donnees suffisent pour reprendre l’historique.
+
+Bon tirage et bonne chance a votre guilde !
