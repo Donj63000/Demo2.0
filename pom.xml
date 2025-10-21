@@ -25,6 +25,10 @@
         <javafx.maven.plugin.version>0.0.8</javafx.maven.plugin.version>
         <!-- Plate‑forme cible pour les natives JavaFX -->
         <javafx.platform>win</javafx.platform>
+        <!-- Type d'image jpackage par défaut (override: -Djpackage.imageType=EXE) -->
+        <jpackage.imageType>APP_IMAGE</jpackage.imageType>
+        <jpackage.winMenu>false</jpackage.winMenu>
+        <jpackage.winShortcut>false</jpackage.winShortcut>
     </properties>
 
     <!-- =========================== -->
@@ -167,5 +171,46 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>windows-installer</id>
+            <activation>
+                <os>
+                    <family>Windows</family>
+                </os>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.panteleyev</groupId>
+                        <artifactId>jpackage-maven-plugin</artifactId>
+                        <version>1.7.1</version>
+                        <executions>
+                            <execution>
+                                <id>create-windows-installer</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jpackage</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <input>${project.build.directory}</input>
+                            <destination>${project.build.directory}/installer</destination>
+                            <name>DemoLoterie</name>
+                            <appVersion>${project.version}</appVersion>
+                            <vendor>DemoLoterie</vendor>
+                            <type>${jpackage.imageType}</type>
+                            <mainJar>${project.build.finalName}.jar</mainJar>
+                            <mainClass>org.example.Launcher</mainClass>
+                            <winMenu>${jpackage.winMenu}</winMenu>
+                            <winShortcut>${jpackage.winShortcut}</winShortcut>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

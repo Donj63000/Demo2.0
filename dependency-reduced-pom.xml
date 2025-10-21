@@ -45,11 +45,49 @@
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <id>windows-installer</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.panteleyev</groupId>
+            <artifactId>jpackage-maven-plugin</artifactId>
+            <version>1.7.1</version>
+            <executions>
+              <execution>
+                <id>create-windows-installer</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>jpackage</goal>
+                </goals>
+              </execution>
+            </executions>
+            <configuration>
+              <input>${project.build.directory}</input>
+              <destination>${project.build.directory}/installer</destination>
+              <name>DemoLoterie</name>
+              <appVersion>${project.version}</appVersion>
+              <vendor>DemoLoterie</vendor>
+              <type>${jpackage.imageType}</type>
+              <mainJar>${project.build.finalName}.jar</mainJar>
+              <mainClass>org.example.Launcher</mainClass>
+              <winMenu>${jpackage.winMenu}</winMenu>
+              <winShortcut>${jpackage.winShortcut}</winShortcut>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
   <properties>
     <javafx.platform>win</javafx.platform>
+    <jpackage.winMenu>false</jpackage.winMenu>
     <java.version>21</java.version>
     <javafx.maven.plugin.version>0.0.8</javafx.maven.plugin.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <javafx.version>21.0.2</javafx.version>
+    <jpackage.imageType>APP_IMAGE</jpackage.imageType>
+    <jpackage.winShortcut>false</jpackage.winShortcut>
   </properties>
 </project>
