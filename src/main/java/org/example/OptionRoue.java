@@ -23,8 +23,8 @@ public class OptionRoue extends Stage {
 
     // Nouvelle variable statique : durée de rotation (50.0 s par défaut)
     private static double spinDuration = 50.0;
-    private static boolean adaptLargeScreens = false;
-    private static double uiScale = 1.0;
+    private static boolean adaptLargeScreens = true;
+    private static double uiScale = Double.POSITIVE_INFINITY;
 
     public OptionRoue() {
         setTitle("Options de la roue");
@@ -52,14 +52,17 @@ public class OptionRoue extends Stage {
 
         ComboBox<ScalePreset> scaleBox = new ComboBox<>();
         scaleBox.getItems().addAll(
+                new ScalePreset(Double.POSITIVE_INFINITY, "Auto (plein écran)"),
                 new ScalePreset(1.0, "100 %"),
                 new ScalePreset(1.1, "110 %"),
                 new ScalePreset(1.25, "125 %"),
                 new ScalePreset(1.35, "135 %"),
-                new ScalePreset(1.5, "150 %")
+                new ScalePreset(1.5, "150 %"),
+                new ScalePreset(1.75, "175 %"),
+                new ScalePreset(2.0, "200 %")
         );
         scaleBox.setValue(scaleBox.getItems().stream()
-                .filter(p -> Math.abs(p.value - uiScale) < 0.0001)
+                .filter(p -> matchesScale(p.value, uiScale))
                 .findFirst()
                 .orElse(scaleBox.getItems().get(0)));
         scaleBox.setDisable(!adaptLargeScreens);
@@ -137,6 +140,13 @@ public class OptionRoue extends Stage {
 
     public static double getUiScale() {
         return uiScale;
+    }
+
+    private static boolean matchesScale(double candidate, double value) {
+        if (Double.isInfinite(candidate) || Double.isInfinite(value)) {
+            return Double.isInfinite(candidate) && Double.isInfinite(value);
+        }
+        return Math.abs(candidate - value) < 0.0001;
     }
 
     private record ScalePreset(double value, String label) {

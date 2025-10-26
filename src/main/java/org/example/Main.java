@@ -1,10 +1,14 @@
 package org.example;
 
 import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.beans.property.DoubleProperty;
+import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.collections.ListChangeListener;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
@@ -12,6 +16,7 @@ import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.layout.*;
 import javafx.scene.text.Font;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 
 import java.io.IOException;
@@ -40,6 +45,15 @@ public class Main extends Application {
     private Stage primaryStage;
     private BorderPane rootPane;
     private Scene scene;
+    private final DoubleProperty uiBaseScale = new SimpleDoubleProperty(1.0);
+    private StackPane viewport;
+    private boolean windowedFullscreen;
+    private double savedWindowX = Double.NaN;
+    private double savedWindowY = Double.NaN;
+    private double savedWindowWidth = SCENE_WIDTH + WINDOW_MARGIN_WIDTH;
+    private double savedWindowHeight = SCENE_HEIGHT + WINDOW_MARGIN_HEIGHT;
+    private boolean savedResizable = true;
+    private Button windowedFullscreenButton;
 
     private DonationsLedger donationsLedger;
     private Integer currentRoundId;
@@ -51,12 +65,16 @@ public class Main extends Application {
     private final Map<Participant, ChangeListener<Boolean>> participationListeners = new IdentityHashMap<>();
     private String lastSnapshotSignature;
     private boolean wheelRefreshSuppressed;
+    private static final double WINDOW_MARGIN_WIDTH  = 40;
+    private static final double WINDOW_MARGIN_HEIGHT = 80;
 
     @Override
     public void start(Stage primaryStage) {
         this.primaryStage = primaryStage;
         // Root principal
         this.rootPane = new BorderPane();
+        rootPane.scaleXProperty().bind(uiBaseScale);
+        rootPane.scaleYProperty().bind(uiBaseScale);
         BorderPane root = rootPane;
 
         // === 1) Titre + Résultat (en haut) ===
@@ -109,11 +127,23 @@ public class Main extends Application {
 
         // === 4) Roue au centre ===
         roue = new Roue(resultat);
-        StackPane centerPane = new StackPane(roue.getRootPane());
-        centerPane.setAlignment(Pos.TOP_CENTER);
+        Region wheelRoot = (Region) roue.getRootPane();
+        StackPane centerPane = new StackPane(wheelRoot);
+        centerPane.setAlignment(Pos.CENTER);
         centerPane.setPadding(new Insets(0, 0, 0, 0));
-        centerPane.setMaxSize(WHEEL_RADIUS * 2 + 40, WHEEL_RADIUS * 2 + 40);
         centerPane.setTranslateY(-6);
+        wheelRoot.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        ChangeListener<Number> scaleWheel = (obs, ov, nv) -> {
+            double availW = Math.max(1, centerPane.getWidth());
+            double availH = Math.max(1, centerPane.getHeight());
+            double base = Main.WHEEL_RADIUS * 2.0 + 12;
+            double s = Math.min(availW / base, availH / base);
+            wheelRoot.setScaleX(s);
+            wheelRoot.setScaleY(s);
+        };
+        centerPane.widthProperty().addListener(scaleWheel);
+        centerPane.heightProperty().addListener(scaleWheel);
+        Platform.runLater(() -> scaleWheel.changed(null, null, null));
         root.setCenter(centerPane);
 
         // Recharge la sauvegarde, s’il y en a une
@@ -180,6 +210,7 @@ public class Main extends Application {
             optWin.showAndWait();
             applyUiScale();
             primaryStage.centerOnScreen();
+            Platform.runLater(this::refreshViewportScale);
             roue.updateWheelDisplay(users.getParticipantNames());
         });
 
@@ -237,10 +268,17 @@ public class Main extends Application {
         // === Nouveau bouton "Plein écran" ===
         Button fullScreenButton = new Button("Plein écran");
         fullScreenButton.setOnAction(e -> {
+            if (windowedFullscreen) {
+                setWindowedFullscreen(false);
+            }
             // Bascule l'état "fullscreen" à chaque clic
             boolean current = primaryStage.isFullScreen();
             primaryStage.setFullScreen(!current);
         });
+        windowedFullscreenButton = new Button("Plein écran fenêtré");
+        windowedFullscreenButton.setOnAction(e -> setWindowedFullscreen(!windowedFullscreen));
+        updateWindowedFullscreenButton();
+
         Button[] buttonsToLock = {
                 spinButton,
                 optionsButton,
@@ -248,6 +286,7 @@ public class Main extends Application {
                 saveButton,
                 cleanButton,
                 fullScreenButton,
+                windowedFullscreenButton,
                 historyButton
         };
 
@@ -318,7 +357,8 @@ public class Main extends Application {
                 resetButton,
                 saveButton,
                 cleanButton,
-                fullScreenButton
+                fullScreenButton,
+                windowedFullscreenButton
         };
         for (Button button : bottomButtons) {
             Theme.styleButton(button);
@@ -334,7 +374,13 @@ public class Main extends Application {
         root.setBottom(bottomBox);
 
         // === 6) Scène + Stage ===
-        scene = new Scene(rootPane, SCENE_WIDTH, SCENE_HEIGHT);
+        viewport = new StackPane(rootPane);
+        viewport.setPadding(Insets.EMPTY);
+        ChangeListener<Number> fitToWindow = (obs, ov, nv) -> refreshViewportScale();
+        viewport.widthProperty().addListener(fitToWindow);
+        viewport.heightProperty().addListener(fitToWindow);
+
+        scene = new Scene(viewport, SCENE_WIDTH, SCENE_HEIGHT);
         scene.getStylesheets().add(
                 Objects.requireNonNull(getClass().getResource("/app.css")).toExternalForm()
         );
@@ -345,37 +391,150 @@ public class Main extends Application {
         // -> Optionnel : enlever l'indication pour quitter le fullscreen
         // primaryStage.setFullScreenExitHint("");
 
+        Runnable reapply = () -> Platform.runLater(this::applyUiScale);
+        primaryStage.fullScreenProperty().addListener((obs, ov, nv) -> {
+            if (!nv) {
+                rememberWindowBounds();
+            }
+            reapply.run();
+            Platform.runLater(this::refreshViewportScale);
+        });
+        primaryStage.maximizedProperty().addListener((obs, ov, nv) -> {
+            if (!nv) {
+                rememberWindowBounds();
+            }
+            reapply.run();
+            Platform.runLater(this::refreshViewportScale);
+        });
+        ChangeListener<Number> stageMoveResizeListener = (obs, ov, nv) -> {
+            rememberWindowBounds();
+            reapply.run();
+            Platform.runLater(this::refreshViewportScale);
+        };
+        primaryStage.xProperty().addListener(stageMoveResizeListener);
+        primaryStage.yProperty().addListener(stageMoveResizeListener);
+        primaryStage.widthProperty().addListener(stageMoveResizeListener);
+        primaryStage.heightProperty().addListener(stageMoveResizeListener);
+
+        Platform.runLater(this::refreshViewportScale);
+
         primaryStage.show();
         primaryStage.centerOnScreen();
+        Platform.runLater(() -> {
+            rememberWindowBounds();
+            applyUiScale();
+        });
     }
 
     private void applyUiScale() {
         if (rootPane == null || primaryStage == null) {
             return;
         }
-        double requestedScale = OptionRoue.isAdaptLargeScreens() ? OptionRoue.getUiScale() : 1.0;
-        double scale = Math.max(1.0, requestedScale);
-        var bounds = javafx.stage.Screen.getPrimary().getVisualBounds();
-        double marginW = 40;
-        double marginH = 80;
-        if (bounds != null) {
-            double maxScaleW = (bounds.getWidth() - marginW) / SCENE_WIDTH;
-            double maxScaleH = (bounds.getHeight() - marginH) / SCENE_HEIGHT;
-            double maxScale = Math.min(maxScaleW, maxScaleH);
-            if (Double.isFinite(maxScale) && maxScale > 0) {
-                scale = Math.min(scale, Math.max(1.0, maxScale));
+        double requested = OptionRoue.isAdaptLargeScreens() ? OptionRoue.getUiScale() : 1.0;
+        double scale = Math.max(1.0, requested);
+
+        Screen screen = getCurrentScreen();
+        Rectangle2D bounds = screen.getVisualBounds();
+
+        double maxScaleW = (bounds.getWidth() - WINDOW_MARGIN_WIDTH) / SCENE_WIDTH;
+        double maxScaleH = (bounds.getHeight() - WINDOW_MARGIN_HEIGHT) / SCENE_HEIGHT;
+        double maxScale = Math.min(maxScaleW, maxScaleH);
+
+        if (Double.isFinite(maxScale) && maxScale > 0) {
+            scale = Math.min(scale, Math.max(1.0, maxScale));
+        }
+
+        double width = SCENE_WIDTH * scale + WINDOW_MARGIN_WIDTH;
+        double height = SCENE_HEIGHT * scale + WINDOW_MARGIN_HEIGHT;
+
+        primaryStage.setMinWidth(width);
+        primaryStage.setMinHeight(height);
+
+        if (!primaryStage.isFullScreen() && !primaryStage.isMaximized() && !windowedFullscreen) {
+            primaryStage.setWidth(width);
+            primaryStage.setHeight(height);
+        }
+    }
+
+    private void refreshViewportScale() {
+        if (viewport == null) {
+            return;
+        }
+        double availW = Math.max(1, viewport.getWidth() - WINDOW_MARGIN_WIDTH);
+        double availH = Math.max(1, viewport.getHeight() - WINDOW_MARGIN_HEIGHT);
+        double sWin = Math.min(availW / SCENE_WIDTH, availH / SCENE_HEIGHT);
+        double sReq = OptionRoue.isAdaptLargeScreens() ? OptionRoue.getUiScale() : 1.0;
+        uiBaseScale.set(Math.max(1.0, Math.min(sWin, sReq)));
+    }
+
+    private void rememberWindowBounds() {
+        if (primaryStage == null
+                || windowedFullscreen
+                || primaryStage.isFullScreen()
+                || primaryStage.isMaximized()) {
+            return;
+        }
+        savedWindowX = primaryStage.getX();
+        savedWindowY = primaryStage.getY();
+        savedWindowWidth = primaryStage.getWidth();
+        savedWindowHeight = primaryStage.getHeight();
+        savedResizable = primaryStage.isResizable();
+    }
+
+    private Screen getCurrentScreen() {
+        if (primaryStage == null) {
+            return Screen.getPrimary();
+        }
+        Rectangle2D windowBounds = new Rectangle2D(
+                primaryStage.getX(),
+                primaryStage.getY(),
+                Math.max(1, primaryStage.getWidth()),
+                Math.max(1, primaryStage.getHeight())
+        );
+        var candidates = Screen.getScreensForRectangle(windowBounds);
+        return candidates.isEmpty() ? Screen.getPrimary() : candidates.get(0);
+    }
+
+    private void setWindowedFullscreen(boolean enable) {
+        if (primaryStage == null || windowedFullscreen == enable) {
+            return;
+        }
+        if (enable) {
+            rememberWindowBounds();
+            Rectangle2D bounds = getCurrentScreen().getVisualBounds();
+            windowedFullscreen = true;
+            primaryStage.setFullScreen(false);
+            primaryStage.setMaximized(false);
+            primaryStage.setResizable(false);
+            primaryStage.setX(bounds.getMinX());
+            primaryStage.setY(bounds.getMinY());
+            primaryStage.setWidth(bounds.getWidth());
+            primaryStage.setHeight(bounds.getHeight());
+        } else {
+            windowedFullscreen = false;
+            primaryStage.setResizable(savedResizable);
+            if (!Double.isNaN(savedWindowX) && !Double.isNaN(savedWindowY)) {
+                primaryStage.setX(savedWindowX);
+                primaryStage.setY(savedWindowY);
+            }
+            if (!Double.isNaN(savedWindowWidth) && !Double.isNaN(savedWindowHeight)) {
+                primaryStage.setWidth(savedWindowWidth);
+                primaryStage.setHeight(savedWindowHeight);
             }
         }
-        rootPane.setScaleX(scale);
-        rootPane.setScaleY(scale);
-        double width = SCENE_WIDTH * scale;
-        double height = SCENE_HEIGHT * scale;
-        double windowWidth = width + marginW;
-        double windowHeight = height + marginH;
-        primaryStage.setMinWidth(windowWidth);
-        primaryStage.setMinHeight(windowHeight);
-        primaryStage.setWidth(windowWidth);
-        primaryStage.setHeight(windowHeight);
+        updateWindowedFullscreenButton();
+        Platform.runLater(() -> {
+            refreshViewportScale();
+            applyUiScale();
+        });
+    }
+
+    private void updateWindowedFullscreenButton() {
+        if (windowedFullscreenButton != null) {
+            windowedFullscreenButton.setText(
+                    windowedFullscreen ? "Quitter plein écran fenêtré" : "Plein écran fenêtré"
+            );
+        }
     }
 
     private void attachParticipationListener(Participant participant) {
