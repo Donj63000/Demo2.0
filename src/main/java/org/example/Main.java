@@ -364,8 +364,8 @@ public class Main extends Application {
         scaledViewport = new ScaledContentPane(rootPane, DESIGN_WIDTH, DESIGN_HEIGHT);
         scaledViewport.setPadding(Insets.EMPTY);
         scaledViewport.setBackground(Theme.makeBackgroundCover("/img.png"));
-        // Si tu veux empêcher l'agrandissement au-delà de la maquette :
-        // scaledViewport.setAllowUpscale(false);
+        // Autorise l'UI à s'adapter aux écrans plus petits et plus grands.
+        scaledViewport.setAllowUpscale(true);
 
         Dimension2D initialSize = computeInitialSceneSize(getCurrentScreen());
         scene = new Scene(scaledViewport, initialSize.getWidth(), initialSize.getHeight());
