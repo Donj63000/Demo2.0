@@ -364,7 +364,7 @@ public class Main extends Application {
         FlowPane bottomBox = new FlowPane(10, 8);
         bottomBox.setAlignment(Pos.CENTER);
         bottomBox.setPadding(new Insets(2, 12, 8, 12));
-        bottomBox.setPrefWrapLength(DESIGN_WIDTH - 28);
+        bottomBox.prefWrapLengthProperty().bind(root.widthProperty().subtract(28));
         bottomBox.getChildren().addAll(bottomButtons);
         root.setBottom(bottomBox);
 
