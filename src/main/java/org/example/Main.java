@@ -41,6 +41,8 @@ public class Main extends Application {
 
     // Rayon de la roue
     public static final double WHEEL_RADIUS  = 280;
+    private static final double LEFT_COL_WIDTH  = 400;
+    private static final double RIGHT_COL_WIDTH = 360;
 
     // Durée du spin
     public static final double SPIN_DURATION = 5.0; // en secondes
@@ -85,6 +87,7 @@ public class Main extends Application {
         // Rapprochés : spacing = 4 px
         HBox topBox = new HBox(resultat.getNode());
         topBox.setAlignment(Pos.CENTER);
+        topBox.setMaxWidth(Double.MAX_VALUE);
 
         VBox topContainer = new VBox(1,
                 bandeau.getNode(),
@@ -92,6 +95,7 @@ public class Main extends Application {
         );
         topContainer.setAlignment(Pos.TOP_LEFT);
         topContainer.setPadding(new Insets(0, 0, 2, 0));
+        topContainer.setFillWidth(true);
         root.setTop(topContainer);
 
         // === 2) Participants (gauche) ===
@@ -109,8 +113,9 @@ public class Main extends Application {
         leftBox.setAlignment(Pos.TOP_LEFT);
 
         // Largeur fixe, hauteur adaptable pour libérer l'espace vertical
-        leftBox.setPrefWidth(400);
-        leftBox.setMinWidth(360);
+        leftBox.setPrefWidth(LEFT_COL_WIDTH);
+        leftBox.setMinWidth(LEFT_COL_WIDTH);
+        leftBox.setMaxWidth(LEFT_COL_WIDTH);
         leftBox.setPrefHeight(Region.USE_COMPUTED_SIZE);
         root.setLeft(leftBox);
 
@@ -118,8 +123,9 @@ public class Main extends Application {
         VBox rightBox = new VBox(8, gains.getRootPane());
         rightBox.setPadding(new Insets(4, 18, 8, 10));
         rightBox.setAlignment(Pos.TOP_CENTER);
-        rightBox.setPrefWidth(360);
-        rightBox.setMinWidth(320);
+        rightBox.setPrefWidth(RIGHT_COL_WIDTH);
+        rightBox.setMinWidth(RIGHT_COL_WIDTH);
+        rightBox.setMaxWidth(RIGHT_COL_WIDTH);
         rightBox.setPrefHeight(Region.USE_COMPUTED_SIZE);
         root.setRight(rightBox);
 
@@ -127,11 +133,13 @@ public class Main extends Application {
         roue = new Roue(resultat);
         Region wheelRoot = (Region) roue.getRootPane();
         wheelRoot.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        wheelRoot.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
 
         StackPane centerPane = new StackPane(wheelRoot);
         centerPane.setAlignment(Pos.CENTER);
         centerPane.setPadding(Insets.EMPTY);
-        centerPane.setTranslateY(-6);
+        centerPane.setTranslateX(0);
+        centerPane.setTranslateY(0);
 
         root.setCenter(centerPane);
 
