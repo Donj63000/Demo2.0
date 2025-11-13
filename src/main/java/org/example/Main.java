@@ -2,10 +2,9 @@ package org.example;
 
 import javafx.application.Application;
 import javafx.application.Platform;
-import javafx.beans.property.DoubleProperty;
-import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.collections.ListChangeListener;
+import javafx.geometry.Dimension2D;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
@@ -32,9 +31,13 @@ import java.util.stream.Collectors;
 
 public class Main extends Application {
 
-    // Dimensions de la fenêtre
-    public static final double SCENE_WIDTH   = 1200;
-    public static final double SCENE_HEIGHT  = 900;
+    // Résolution de référence (maquette)
+    public static final double DESIGN_WIDTH  = 1920;
+    public static final double DESIGN_HEIGHT = 1080;
+    private static final double INITIAL_WINDOW_WIDTH  = 1280;
+    private static final double INITIAL_WINDOW_HEIGHT = 720;
+    private static final double MIN_WINDOW_WIDTH = 1024;
+    private static final double MIN_WINDOW_HEIGHT = 640;
 
     // Rayon de la roue
     public static final double WHEEL_RADIUS  = 280;
@@ -45,13 +48,12 @@ public class Main extends Application {
     private Stage primaryStage;
     private BorderPane rootPane;
     private Scene scene;
-    private final DoubleProperty uiBaseScale = new SimpleDoubleProperty(1.0);
-    private StackPane viewport;
+    private ScaledContentPane scaledViewport;
     private boolean windowedFullscreen;
     private double savedWindowX = Double.NaN;
     private double savedWindowY = Double.NaN;
-    private double savedWindowWidth = SCENE_WIDTH + WINDOW_MARGIN_WIDTH;
-    private double savedWindowHeight = SCENE_HEIGHT + WINDOW_MARGIN_HEIGHT;
+    private double savedWindowWidth = INITIAL_WINDOW_WIDTH;
+    private double savedWindowHeight = INITIAL_WINDOW_HEIGHT;
     private boolean savedResizable = true;
     private Button windowedFullscreenButton;
 
@@ -65,17 +67,16 @@ public class Main extends Application {
     private final Map<Participant, ChangeListener<Boolean>> participationListeners = new IdentityHashMap<>();
     private String lastSnapshotSignature;
     private boolean wheelRefreshSuppressed;
-    private static final double WINDOW_MARGIN_WIDTH  = 40;
-    private static final double WINDOW_MARGIN_HEIGHT = 80;
 
     @Override
     public void start(Stage primaryStage) {
         this.primaryStage = primaryStage;
         // Root principal
         this.rootPane = new BorderPane();
-        rootPane.scaleXProperty().bind(uiBaseScale);
-        rootPane.scaleYProperty().bind(uiBaseScale);
         BorderPane root = rootPane;
+        rootPane.setPrefSize(DESIGN_WIDTH, DESIGN_HEIGHT);
+        rootPane.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        rootPane.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
 
         // === 1) Titre + Résultat (en haut) ===
         Titre bandeau = new Titre();
@@ -92,9 +93,6 @@ public class Main extends Application {
         topContainer.setAlignment(Pos.TOP_LEFT);
         topContainer.setPadding(new Insets(0, 0, 2, 0));
         root.setTop(topContainer);
-
-        // Image de fond
-        root.setBackground(Theme.makeBackgroundCover("/img.png"));
 
         // === 2) Participants (gauche) ===
         users = new Users();
@@ -128,22 +126,13 @@ public class Main extends Application {
         // === 4) Roue au centre ===
         roue = new Roue(resultat);
         Region wheelRoot = (Region) roue.getRootPane();
+        wheelRoot.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+
         StackPane centerPane = new StackPane(wheelRoot);
         centerPane.setAlignment(Pos.CENTER);
-        centerPane.setPadding(new Insets(0, 0, 0, 0));
+        centerPane.setPadding(Insets.EMPTY);
         centerPane.setTranslateY(-6);
-        wheelRoot.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
-        ChangeListener<Number> scaleWheel = (obs, ov, nv) -> {
-            double availW = Math.max(1, centerPane.getWidth());
-            double availH = Math.max(1, centerPane.getHeight());
-            double base = Main.WHEEL_RADIUS * 2.0 + 12;
-            double s = Math.min(availW / base, availH / base);
-            wheelRoot.setScaleX(s);
-            wheelRoot.setScaleY(s);
-        };
-        centerPane.widthProperty().addListener(scaleWheel);
-        centerPane.heightProperty().addListener(scaleWheel);
-        Platform.runLater(() -> scaleWheel.changed(null, null, null));
+
         root.setCenter(centerPane);
 
         // Recharge la sauvegarde, s’il y en a une
@@ -208,9 +197,7 @@ public class Main extends Application {
         optionsButton.setOnAction(e -> {
             OptionRoue optWin = new OptionRoue();
             optWin.showAndWait();
-            applyUiScale();
             primaryStage.centerOnScreen();
-            Platform.runLater(this::refreshViewportScale);
             roue.updateWheelDisplay(users.getParticipantNames());
         });
 
@@ -369,102 +356,92 @@ public class Main extends Application {
         FlowPane bottomBox = new FlowPane(10, 8);
         bottomBox.setAlignment(Pos.CENTER);
         bottomBox.setPadding(new Insets(2, 12, 8, 12));
-        bottomBox.prefWrapLengthProperty().bind(root.widthProperty().subtract(28));
+        bottomBox.setPrefWrapLength(DESIGN_WIDTH - 28);
         bottomBox.getChildren().addAll(bottomButtons);
         root.setBottom(bottomBox);
 
         // === 6) Scène + Stage ===
-        viewport = new StackPane(rootPane);
-        viewport.setPadding(Insets.EMPTY);
-        ChangeListener<Number> fitToWindow = (obs, ov, nv) -> refreshViewportScale();
-        viewport.widthProperty().addListener(fitToWindow);
-        viewport.heightProperty().addListener(fitToWindow);
+        scaledViewport = new ScaledContentPane(rootPane, DESIGN_WIDTH, DESIGN_HEIGHT);
+        scaledViewport.setPadding(Insets.EMPTY);
+        scaledViewport.setBackground(Theme.makeBackgroundCover("/img.png"));
+        // Si tu veux empêcher l'agrandissement au-delà de la maquette :
+        // scaledViewport.setAllowUpscale(false);
 
-        scene = new Scene(viewport, SCENE_WIDTH, SCENE_HEIGHT);
+        Dimension2D initialSize = computeInitialSceneSize(getCurrentScreen());
+        scene = new Scene(scaledViewport, initialSize.getWidth(), initialSize.getHeight());
+        savedWindowWidth = initialSize.getWidth();
+        savedWindowHeight = initialSize.getHeight();
         scene.getStylesheets().add(
                 Objects.requireNonNull(getClass().getResource("/app.css")).toExternalForm()
         );
         primaryStage.setTitle("Loterie de la guilde Evolution [By Coca]");
         primaryStage.setScene(scene);
-        applyUiScale();
+        primaryStage.setMinWidth(MIN_WINDOW_WIDTH);
+        primaryStage.setMinHeight(MIN_WINDOW_HEIGHT);
 
         // -> Optionnel : enlever l'indication pour quitter le fullscreen
         // primaryStage.setFullScreenExitHint("");
 
-        Runnable reapply = () -> Platform.runLater(this::applyUiScale);
         primaryStage.fullScreenProperty().addListener((obs, ov, nv) -> {
             if (!nv) {
                 rememberWindowBounds();
             }
-            reapply.run();
-            Platform.runLater(this::refreshViewportScale);
         });
         primaryStage.maximizedProperty().addListener((obs, ov, nv) -> {
             if (!nv) {
                 rememberWindowBounds();
             }
-            reapply.run();
-            Platform.runLater(this::refreshViewportScale);
         });
-        ChangeListener<Number> stageMoveResizeListener = (obs, ov, nv) -> {
-            rememberWindowBounds();
-            reapply.run();
-            Platform.runLater(this::refreshViewportScale);
-        };
+        ChangeListener<Number> stageMoveResizeListener = (obs, ov, nv) -> rememberWindowBounds();
         primaryStage.xProperty().addListener(stageMoveResizeListener);
         primaryStage.yProperty().addListener(stageMoveResizeListener);
         primaryStage.widthProperty().addListener(stageMoveResizeListener);
         primaryStage.heightProperty().addListener(stageMoveResizeListener);
 
-        Platform.runLater(this::refreshViewportScale);
-
         primaryStage.show();
         primaryStage.centerOnScreen();
-        Platform.runLater(() -> {
-            rememberWindowBounds();
-            applyUiScale();
-        });
+        Platform.runLater(this::rememberWindowBounds);
     }
 
-    private void applyUiScale() {
-        if (rootPane == null || primaryStage == null) {
-            return;
+    private static Dimension2D computeInitialSceneSize(Screen screen) {
+        if (screen == null) {
+            screen = Screen.getPrimary();
         }
-        double requested = OptionRoue.isAdaptLargeScreens() ? OptionRoue.getUiScale() : 1.0;
-        double scale = Math.max(1.0, requested);
-
-        Screen screen = getCurrentScreen();
         Rectangle2D bounds = screen.getVisualBounds();
+        double aspectRatio = DESIGN_WIDTH / DESIGN_HEIGHT;
 
-        double maxScaleW = (bounds.getWidth() - WINDOW_MARGIN_WIDTH) / SCENE_WIDTH;
-        double maxScaleH = (bounds.getHeight() - WINDOW_MARGIN_HEIGHT) / SCENE_HEIGHT;
-        double maxScale = Math.min(maxScaleW, maxScaleH);
+        double maxWidth = bounds.getWidth() * 0.92;
+        double maxHeight = bounds.getHeight() * 0.92;
 
-        if (Double.isFinite(maxScale) && maxScale > 0) {
-            scale = Math.min(scale, Math.max(1.0, maxScale));
+        double width = Math.min(DESIGN_WIDTH, maxWidth);
+        double height = width / aspectRatio;
+        if (height > maxHeight) {
+            height = maxHeight;
+            width = height * aspectRatio;
         }
 
-        double width = SCENE_WIDTH * scale + WINDOW_MARGIN_WIDTH;
-        double height = SCENE_HEIGHT * scale + WINDOW_MARGIN_HEIGHT;
+        double minWidthCandidate = Math.min(bounds.getWidth(), MIN_WINDOW_WIDTH);
+        double minHeightCandidate = Math.min(bounds.getHeight(), MIN_WINDOW_HEIGHT);
 
-        primaryStage.setMinWidth(width);
-        primaryStage.setMinHeight(height);
-
-        if (!primaryStage.isFullScreen() && !primaryStage.isMaximized() && !windowedFullscreen) {
-            primaryStage.setWidth(width);
-            primaryStage.setHeight(height);
+        if (width < minWidthCandidate) {
+            width = minWidthCandidate;
+            height = width / aspectRatio;
         }
-    }
-
-    private void refreshViewportScale() {
-        if (viewport == null) {
-            return;
+        if (height < minHeightCandidate) {
+            height = minHeightCandidate;
+            width = height * aspectRatio;
         }
-        double availW = Math.max(1, viewport.getWidth() - WINDOW_MARGIN_WIDTH);
-        double availH = Math.max(1, viewport.getHeight() - WINDOW_MARGIN_HEIGHT);
-        double sWin = Math.min(availW / SCENE_WIDTH, availH / SCENE_HEIGHT);
-        double sReq = OptionRoue.isAdaptLargeScreens() ? OptionRoue.getUiScale() : 1.0;
-        uiBaseScale.set(Math.max(1.0, Math.min(sWin, sReq)));
+
+        if (width > bounds.getWidth()) {
+            width = bounds.getWidth();
+            height = width / aspectRatio;
+        }
+        if (height > bounds.getHeight()) {
+            height = bounds.getHeight();
+            width = height * aspectRatio;
+        }
+
+        return new Dimension2D(Math.max(320, width), Math.max(240, height));
     }
 
     private void rememberWindowBounds() {
@@ -491,8 +468,39 @@ public class Main extends Application {
                 Math.max(1, primaryStage.getWidth()),
                 Math.max(1, primaryStage.getHeight())
         );
-        var candidates = Screen.getScreensForRectangle(windowBounds);
-        return candidates.isEmpty() ? Screen.getPrimary() : candidates.get(0);
+        Screen bestMatch = null;
+        double bestArea = -1;
+        for (Screen screen : Screen.getScreens()) {
+            double overlap = intersectionArea(windowBounds, screen.getVisualBounds());
+            if (overlap > bestArea) {
+                bestArea = overlap;
+                bestMatch = screen;
+            }
+        }
+        if (bestMatch != null && bestArea > 0) {
+            return bestMatch;
+        }
+        double centerX = windowBounds.getMinX() + windowBounds.getWidth() / 2.0;
+        double centerY = windowBounds.getMinY() + windowBounds.getHeight() / 2.0;
+        for (Screen screen : Screen.getScreens()) {
+            if (screen.getVisualBounds().contains(centerX, centerY)) {
+                return screen;
+            }
+        }
+        return Screen.getPrimary();
+    }
+
+    private static double intersectionArea(Rectangle2D a, Rectangle2D b) {
+        double minX = Math.max(a.getMinX(), b.getMinX());
+        double minY = Math.max(a.getMinY(), b.getMinY());
+        double maxX = Math.min(a.getMaxX(), b.getMaxX());
+        double maxY = Math.min(a.getMaxY(), b.getMaxY());
+        double width = maxX - minX;
+        double height = maxY - minY;
+        if (width <= 0 || height <= 0) {
+            return 0;
+        }
+        return width * height;
     }
 
     private void setWindowedFullscreen(boolean enable) {
@@ -523,10 +531,6 @@ public class Main extends Application {
             }
         }
         updateWindowedFullscreenButton();
-        Platform.runLater(() -> {
-            refreshViewportScale();
-            applyUiScale();
-        });
     }
 
     private void updateWindowedFullscreenButton() {

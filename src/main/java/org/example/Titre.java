@@ -228,16 +228,6 @@ public class Titre {
         pulse.setAutoReverse(true);
         pulse.play();
 
-        ScaleTransition breathe = new ScaleTransition(Duration.seconds(7), titleContainer);
-        breathe.setFromX(1);
-        breathe.setFromY(1);
-        breathe.setToX(1.008);
-        breathe.setToY(1.008);
-        breathe.setCycleCount(ScaleTransition.INDEFINITE);
-        breathe.setAutoReverse(true);
-        breathe.setInterpolator(Interpolator.EASE_BOTH);
-        breathe.play();
-
         shimmer.translateXProperty().addListener((obs, old, val) -> applyShimmerFill());
         shimmerHue.addListener((obs, old, val) -> applyShimmerFill());
         applyShimmerFill();

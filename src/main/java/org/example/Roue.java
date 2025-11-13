@@ -55,6 +55,7 @@ public class Roue {
     private Consumer<String>   spinCallback;
 
     private double dragX, dragY;
+    private boolean draggingWheel;
 
     public Roue(Resultat res){
         this.resultat = res;
@@ -371,10 +372,29 @@ public class Roue {
     }
 
     private void enableDrag(){
-        root.setOnMousePressed(e->{ dragX=e.getSceneX()-root.getTranslateX(); dragY=e.getSceneY()-root.getTranslateY(); root.setCursor(Cursor.CLOSED_HAND);} );
-        root.setOnMouseDragged(e->{ root.setTranslateX(e.getSceneX()-dragX); root.setTranslateY(e.getSceneY()-dragY);} );
-        root.setOnMouseReleased(e-> root.setCursor(Cursor.OPEN_HAND));
-        root.setCursor(Cursor.OPEN_HAND);
+        root.setCursor(Cursor.DEFAULT);
+        root.setOnMousePressed(e -> {
+            if (!e.isShiftDown()) {
+                draggingWheel = false;
+                root.setCursor(Cursor.DEFAULT);
+                return;
+            }
+            draggingWheel = true;
+            dragX = e.getSceneX() - root.getTranslateX();
+            dragY = e.getSceneY() - root.getTranslateY();
+            root.setCursor(Cursor.CLOSED_HAND);
+        });
+        root.setOnMouseDragged(e -> {
+            if (!draggingWheel) {
+                return;
+            }
+            root.setTranslateX(e.getSceneX() - dragX);
+            root.setTranslateY(e.getSceneY() - dragY);
+        });
+        root.setOnMouseReleased(e -> {
+            draggingWheel = false;
+            root.setCursor(Cursor.DEFAULT);
+        });
     }
 
     private Group buildRivetRing(int count, double radius) {

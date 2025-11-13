@@ -23,6 +23,8 @@
         <java.version>21</java.version>
         <javafx.version>21.0.2</javafx.version>
         <javafx.maven.plugin.version>0.0.8</javafx.maven.plugin.version>
+        <java.exec.suffix></java.exec.suffix>
+        <java.launcher>${java.home}${file.separator}bin${file.separator}java${java.exec.suffix}</java.launcher>
         <!-- Plate‑forme cible pour les natives JavaFX -->
         <javafx.platform>win</javafx.platform>
         <!-- Type d'image jpackage par défaut (override: -Djpackage.imageType=EXE) -->
@@ -141,6 +143,7 @@
                 <version>${javafx.maven.plugin.version}</version>
                 <configuration>
                     <mainClass>org.example.Launcher</mainClass>
+                    <executable>${java.launcher}</executable>
                 </configuration>
             </plugin>
 
@@ -210,6 +213,9 @@
                     </plugin>
                 </plugins>
             </build>
+            <properties>
+                <java.exec.suffix>.exe</java.exec.suffix>
+            </properties>
         </profile>
     </profiles>
 
