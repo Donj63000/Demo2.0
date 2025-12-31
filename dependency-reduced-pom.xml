@@ -84,15 +84,37 @@
       </properties>
     </profile>
   </profiles>
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.10.2</version>
+      <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <artifactId>junit-jupiter-api</artifactId>
+          <groupId>org.junit.jupiter</groupId>
+        </exclusion>
+        <exclusion>
+          <artifactId>junit-jupiter-params</artifactId>
+          <groupId>org.junit.jupiter</groupId>
+        </exclusion>
+        <exclusion>
+          <artifactId>junit-jupiter-engine</artifactId>
+          <groupId>org.junit.jupiter</groupId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+  </dependencies>
   <properties>
     <javafx.platform>win</javafx.platform>
     <jpackage.winMenu>false</jpackage.winMenu>
     <java.version>21</java.version>
-    <javafx.maven.plugin.version>0.0.8</javafx.maven.plugin.version>
-    <jpackage.winShortcut>false</jpackage.winShortcut>
     <java.launcher>${java.home}${file.separator}bin${file.separator}java${java.exec.suffix}</java.launcher>
+    <javafx.maven.plugin.version>0.0.8</javafx.maven.plugin.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <javafx.version>21.0.2</javafx.version>
     <jpackage.imageType>APP_IMAGE</jpackage.imageType>
+    <jpackage.winShortcut>false</jpackage.winShortcut>
   </properties>
 </project>

@@ -1,7 +1,14 @@
 package org.example;
 
-import javafx.animation.*;
+import javafx.animation.Animation;
+import javafx.animation.Interpolator;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.RotateTransition;
+import javafx.animation.ScaleTransition;
+import javafx.animation.Timeline;
 import javafx.collections.ObservableList;
+import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.scene.CacheHint;
 import javafx.scene.Cursor;
@@ -10,13 +17,18 @@ import javafx.scene.Node;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.effect.Glow;
 import javafx.scene.layout.StackPane;
-import javafx.scene.paint.*;
-import javafx.scene.shape.Arc;
-import javafx.scene.shape.ArcType;
-import javafx.scene.shape.Circle;
 import javafx.scene.media.Media;
 import javafx.scene.media.MediaException;
 import javafx.scene.media.MediaPlayer;
+import javafx.scene.paint.Color;
+import javafx.scene.paint.CycleMethod;
+import javafx.scene.paint.LinearGradient;
+import javafx.scene.paint.Paint;
+import javafx.scene.paint.RadialGradient;
+import javafx.scene.paint.Stop;
+import javafx.scene.shape.Arc;
+import javafx.scene.shape.ArcType;
+import javafx.scene.shape.Circle;
 import javafx.util.Duration;
 
 import java.util.ArrayList;
@@ -26,44 +38,44 @@ import java.util.function.Consumer;
 
 public class Roue {
 
-    private static final double HUB_RADIUS      = Main.WHEEL_RADIUS * .28;
-    private static final Color  HUB_STROKE      = Theme.ACCENT;
-    private static final double HUB_STROKE_W    = 3;
-    private static final Color  SECTOR_BORDER   = Color.rgb(0,0,0,.25);
+    private static final double HUB_RADIUS = Main.WHEEL_RADIUS * .28;
+    private static final Color HUB_STROKE = Theme.ACCENT;
+    private static final double HUB_STROKE_W = 3;
+    private static final Color SECTOR_BORDER = Color.rgb(0, 0, 0, .25);
     private static final double SECTOR_BORDER_W = 1.1;
-    private static final double GOLDEN_ANGLE    = 137.50776405003785;
-    private static final double BASE_ANGULAR_SPEED = 360.0; // deg/s for constant perceived speed
+    private static final double GOLDEN_ANGLE = 137.50776405003785;
+    private static final double BASE_ANGULAR_SPEED = 360.0;
 
-    private static Color colorByIndex(int idx){
+    private static Color colorByIndex(int idx) {
         double h = (idx * GOLDEN_ANGLE) % 360;
         return Color.hsb(h, .85, .90);
     }
 
     private final StackPane root;
-    private final Group     wheelGroup;
+    private final Group wheelGroup;
     private final RotateTransition rot;
-    private final Resultat  resultat;
+    private final Resultat resultat;
     private final List<Arc> arcs = new ArrayList<>();
     private MediaPlayer spinPlayer;
     private boolean spinSoundFailed;
 
     private String[] seatNames;
-    private Color[]  seatColors;
+    private Color[] seatColors;
 
     private Timeline rainbowLoop;
     private ScaleTransition winnerPulse;
-    private Consumer<String>   spinCallback;
+    private Consumer<String> spinCallback;
 
     private double dragX, dragY;
     private boolean draggingWheel;
 
-    public Roue(Resultat res){
+    public Roue(Resultat res) {
         this.resultat = res;
         this.rot = new RotateTransition();
 
         root = new StackPane();
         root.setAlignment(Pos.CENTER);
-        root.setPrefSize(Main.WHEEL_RADIUS*2, Main.WHEEL_RADIUS*2);
+        root.setPrefSize(Main.WHEEL_RADIUS * 2, Main.WHEEL_RADIUS * 2);
 
         wheelGroup = new Group();
         wheelGroup.setCache(true);
@@ -74,11 +86,20 @@ public class Roue {
         enableDrag();
     }
 
-    public Node getRootPane(){ return root; }
-    public void resetPosition(){ root.setTranslateX(0); root.setTranslateY(0); }
-    public void setOnSpinFinished(Consumer<String> cb){ spinCallback = cb; }
+    public Node getRootPane() {
+        return root;
+    }
 
-    public void updateWheelDisplay(ObservableList<String> tickets){
+    public void resetPosition() {
+        root.setTranslateX(0);
+        root.setTranslateY(0);
+    }
+
+    public void setOnSpinFinished(Consumer<String> cb) {
+        spinCallback = cb;
+    }
+
+    public void updateWheelDisplay(ObservableList<String> tickets) {
         buildSeatArrays(tickets, OptionRoue.getLosingTickets());
 
         wheelGroup.setRotate(0);
@@ -89,9 +110,9 @@ public class Roue {
 
         addDecorRings();
 
-        double step = 360d/ seatNames.length, start=0;
-        for(int i=0;i<seatNames.length;i++){
-            Arc a = buildSector(start, step, seatColors[i], seatNames[i]==null);
+        double step = 360d / seatNames.length, start = 0;
+        for (int i = 0; i < seatNames.length; i++) {
+            Arc a = buildSector(start, step, seatColors[i], seatNames[i] == null);
             arcs.add(a);
             wheelGroup.getChildren().add(a);
             start += step;
@@ -100,15 +121,22 @@ public class Roue {
         wheelGroup.getChildren().add(buildHub());
     }
 
-    public void spinTheWheel(ObservableList<String> t){ updateWheelDisplay(t); spinTheWheel(); }
-    public void spinTheWheel(){
+    public void spinTheWheel(ObservableList<String> t) {
+        updateWheelDisplay(t);
+        spinTheWheel();
+    }
+
+    public void spinTheWheel() {
         stopHighlight();
 
-        int total = seatNames==null?0:seatNames.length;
-        if(total==0){ resultat.setMessage("Aucun ticket – impossible de lancer la roue."); return; }
+        int total = seatNames == null ? 0 : seatNames.length;
+        if (total == 0) {
+            resultat.setMessage("Aucun ticket – impossible de lancer la roue.");
+            return;
+        }
 
         int idx = ThreadLocalRandom.current().nextInt(total);
-        double step = 360d/total;
+        double step = 360d / total;
         double offset = idx * step + step / 2 - 90;
 
         double duration = OptionRoue.getSpinDuration();
@@ -123,16 +151,16 @@ public class Roue {
         rot.setOnFinished(e -> {
             stopSpinSound();
             String pseudo = seatNames[idx];
-            resultat.setMessage(pseudo!=null ? pseudo+" a gagné !" : "Perdu !");
-            if(spinCallback!=null) spinCallback.accept(pseudo);
+            resultat.setMessage(pseudo != null ? pseudo + " a gagné !" : "Perdu !");
+            if (spinCallback != null) spinCallback.accept(pseudo);
             highlightWinner(idx);
         });
         startSpinSound();
         rot.play();
     }
 
-    private void highlightWinner(int idx){
-        if(idx<0||idx>=arcs.size()) {
+    private void highlightWinner(int idx) {
+        if (idx < 0 || idx >= arcs.size()) {
             return;
         }
         Arc a = arcs.get(idx);
@@ -160,9 +188,9 @@ public class Roue {
         }
         rainbowLoop = new Timeline();
         double durationS = 1.6;
-        int    steps     = 24;
-        for(int i=0;i<=steps;i++){
-            double frac = (double)i/steps;
+        int steps = 24;
+        for (int i = 0; i <= steps; i++) {
+            double frac = (double) i / steps;
             Color col = Color.hsb(frac * 360, 0.85, 1.0);
             rainbowLoop.getKeyFrames().add(
                     new KeyFrame(Duration.seconds(frac * durationS),
@@ -174,8 +202,9 @@ public class Roue {
         rainbowLoop.setCycleCount(Animation.INDEFINITE);
         rainbowLoop.play();
     }
-    private void stopHighlight(){
-        if(rainbowLoop!=null) {
+
+    private void stopHighlight() {
+        if (rainbowLoop != null) {
             rainbowLoop.stop();
             rainbowLoop = null;
         }
@@ -183,7 +212,7 @@ public class Roue {
             winnerPulse.stop();
             winnerPulse = null;
         }
-        arcs.forEach(x->{
+        arcs.forEach(x -> {
             x.setEffect(null);
             x.setStroke(SECTOR_BORDER);
             x.setStrokeWidth(SECTOR_BORDER_W);
@@ -227,7 +256,7 @@ public class Roue {
         }
     }
 
-    private void addDecorRings(){
+    private void addDecorRings() {
         Group rings = new Group();
         rings.setMouseTransparent(true);
 
@@ -293,8 +322,9 @@ public class Roue {
         );
         wheelGroup.getChildren().add(rings);
     }
-    private Arc buildSector(double start,double extent,Color base,boolean loser){
-        Arc arc = new Arc(0,0, Main.WHEEL_RADIUS, Main.WHEEL_RADIUS, start, extent);
+
+    private Arc buildSector(double start, double extent, Color base, boolean loser) {
+        Arc arc = new Arc(0, 0, Main.WHEEL_RADIUS, Main.WHEEL_RADIUS, start, extent);
         arc.setType(ArcType.ROUND);
 
         Color highlight = base.interpolate(Color.WHITE, 0.28);
@@ -302,12 +332,12 @@ public class Roue {
 
         Paint p = loser
                 ? new LinearGradient(
-                        0, 0, 1, 1, true, CycleMethod.NO_CYCLE,
-                        new Stop(0, Color.rgb(55, 55, 55)),
-                        new Stop(0.5, Color.rgb(35, 35, 35)),
-                        new Stop(1, Color.rgb(20, 20, 20))
-                )
-                : new LinearGradient(0,0,1,1,true,CycleMethod.NO_CYCLE,
+                0, 0, 1, 1, true, CycleMethod.NO_CYCLE,
+                new Stop(0, Color.rgb(55, 55, 55)),
+                new Stop(0.5, Color.rgb(35, 35, 35)),
+                new Stop(1, Color.rgb(20, 20, 20))
+        )
+                : new LinearGradient(0, 0, 1, 1, true, CycleMethod.NO_CYCLE,
                 new Stop(0, highlight),
                 new Stop(.45, base),
                 new Stop(1, shadow));
@@ -318,9 +348,10 @@ public class Roue {
         arc.setOpacity(loser ? 0.85 : 0.97);
         return arc;
     }
-    private Node buildHub(){
+
+    private Node buildHub() {
         Circle base = new Circle(HUB_RADIUS,
-                new RadialGradient(0,0,.25,.25,1,true,CycleMethod.NO_CYCLE,
+                new RadialGradient(0, 0, .25, .25, 1, true, CycleMethod.NO_CYCLE,
                         new Stop(0, Theme.ACCENT_LIGHT),
                         new Stop(1, Theme.ACCENT.darker())));
         base.setStroke(HUB_STROKE);
@@ -352,26 +383,26 @@ public class Roue {
         return gloss;
     }
 
-    private void buildSeatArrays(ObservableList<String> tickets,int losers){
+    private void buildSeatArrays(ObservableList<String> tickets, int losers) {
         int P = tickets.size(), T = P + losers;
-        seatNames  = new String[T];
+        seatNames = new String[T];
         seatColors = new Color[T];
 
-        int colorIdx=0;
-        double step = (double)T / P, acc = 0;
-        for(int i=0;i<P;i++){
-            int idx = Math.min((int)Math.round(acc), T-1);
-            while(seatNames[idx]!=null) idx = (idx+1)%T;
-            seatNames[idx]  = tickets.get(i);
+        int colorIdx = 0;
+        double step = (double) T / P, acc = 0;
+        for (int i = 0; i < P; i++) {
+            int idx = Math.min((int) Math.round(acc), T - 1);
+            while (seatNames[idx] != null) idx = (idx + 1) % T;
+            seatNames[idx] = tickets.get(i);
             seatColors[idx] = colorByIndex(colorIdx++);
             acc += step;
         }
-        for(int i=0;i<T;i++){
-            if(seatNames[i]==null) seatColors[i]= Color.rgb(30,30,30);
+        for (int i = 0; i < T; i++) {
+            if (seatNames[i] == null) seatColors[i] = Color.rgb(30, 30, 30);
         }
     }
 
-    private void enableDrag(){
+    private void enableDrag() {
         root.setCursor(Cursor.DEFAULT);
         root.setOnMousePressed(e -> {
             if (!e.isShiftDown()) {
@@ -380,16 +411,22 @@ public class Roue {
                 return;
             }
             draggingWheel = true;
-            dragX = e.getSceneX() - root.getTranslateX();
-            dragY = e.getSceneY() - root.getTranslateY();
+            Point2D start = root.getParent() != null
+                    ? root.getParent().sceneToLocal(e.getSceneX(), e.getSceneY())
+                    : new Point2D(e.getSceneX(), e.getSceneY());
+            dragX = start.getX() - root.getTranslateX();
+            dragY = start.getY() - root.getTranslateY();
             root.setCursor(Cursor.CLOSED_HAND);
         });
         root.setOnMouseDragged(e -> {
             if (!draggingWheel) {
                 return;
             }
-            root.setTranslateX(e.getSceneX() - dragX);
-            root.setTranslateY(e.getSceneY() - dragY);
+            Point2D current = root.getParent() != null
+                    ? root.getParent().sceneToLocal(e.getSceneX(), e.getSceneY())
+                    : new Point2D(e.getSceneX(), e.getSceneY());
+            root.setTranslateX(current.getX() - dragX);
+            root.setTranslateY(current.getY() - dragY);
         });
         root.setOnMouseReleased(e -> {
             draggingWheel = false;

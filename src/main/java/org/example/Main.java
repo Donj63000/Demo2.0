@@ -5,8 +5,8 @@ import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
 import javafx.collections.ListChangeListener;
 import javafx.geometry.Dimension2D;
-import javafx.geometry.Point2D;
 import javafx.geometry.Insets;
+import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
@@ -14,7 +14,12 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
-import javafx.scene.layout.*;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
@@ -25,43 +30,48 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.List;
+import java.util.prefs.Preferences;
 import java.util.stream.Collectors;
 
 public class Main extends Application {
 
-    // Résolution de référence (maquette)
-    public static final double DESIGN_WIDTH  = 1920;
+    public static final double DESIGN_WIDTH = 1920;
     public static final double DESIGN_HEIGHT = 1080;
-    private static final double INITIAL_WINDOW_WIDTH  = 1280;
+    private static final double INITIAL_WINDOW_WIDTH = 1280;
     private static final double INITIAL_WINDOW_HEIGHT = 720;
     private static final double MIN_WINDOW_WIDTH = 1024;
     private static final double MIN_WINDOW_HEIGHT = 640;
 
-    // Rayon de la roue
-    public static final double WHEEL_RADIUS  = 280;
-    private static final double LEFT_COL_WIDTH  = 400;
+    public static final double WHEEL_RADIUS = 280;
+    private static final double LEFT_COL_WIDTH = 400;
     private static final double RIGHT_COL_WIDTH = 360;
 
-    // Durée du spin
-    public static final double SPIN_DURATION = 5.0; // en secondes
+    public static final double SPIN_DURATION = 5.0;
 
     private Stage primaryStage;
     private BorderPane rootPane;
     private Scene scene;
     private ScaledContentPane scaledViewport;
+
     private Screen lastKnownScreen;
+
     private boolean windowedFullscreen;
     private double savedWindowX = Double.NaN;
     private double savedWindowY = Double.NaN;
     private double savedWindowWidth = INITIAL_WINDOW_WIDTH;
     private double savedWindowHeight = INITIAL_WINDOW_HEIGHT;
     private boolean savedResizable = true;
+
     private Button windowedFullscreenButton;
     private Button adaptScreenButton;
+
     private boolean adaptiveScalingEnabled;
+    private boolean applyingStageBounds;
+    private boolean suppressExitFullScreenRestore;
+    private boolean suppressExitMaximizedRestore;
 
     private DonationsLedger donationsLedger;
     private Integer currentRoundId;
@@ -73,41 +83,64 @@ public class Main extends Application {
     private final Map<Participant, ChangeListener<Boolean>> participationListeners = new IdentityHashMap<>();
     private String lastSnapshotSignature;
     private boolean wheelRefreshSuppressed;
+    private static final String PREF_ADAPTIVE = "ui.adaptiveScaling";
+
+    private static boolean shouldAutoEnableAdaptive(Screen screen) {
+        if (screen == null) {
+            return false;
+        }
+        Rectangle2D b = screen.getVisualBounds();
+        double s = Math.min(b.getWidth() / DESIGN_WIDTH, b.getHeight() / DESIGN_HEIGHT);
+        return Double.isFinite(s) && s >= 1.15;
+    }
+
+    private boolean loadAdaptivePreference(Screen screen) {
+        boolean defaultValue = shouldAutoEnableAdaptive(screen);
+        try {
+            Preferences p = Preferences.userNodeForPackage(Main.class);
+            return p.getBoolean(PREF_ADAPTIVE, defaultValue);
+        } catch (Exception ignored) {
+            return defaultValue;
+        }
+    }
+
+    private void saveAdaptivePreference() {
+        try {
+            Preferences p = Preferences.userNodeForPackage(Main.class);
+            p.putBoolean(PREF_ADAPTIVE, adaptiveScalingEnabled);
+        } catch (Exception ignored) {
+        }
+    }
 
     @Override
     public void start(Stage primaryStage) {
         this.primaryStage = primaryStage;
-        // Root principal
-        this.rootPane = new BorderPane();
+
+        rootPane = new BorderPane();
         BorderPane root = rootPane;
         rootPane.setPrefSize(DESIGN_WIDTH, DESIGN_HEIGHT);
         rootPane.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
         rootPane.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
 
-        // === 1) Titre + Résultat (en haut) ===
         Titre bandeau = new Titre();
         resultat = new Resultat();
 
-        // Rapprochés : spacing = 4 px
         HBox topBox = new HBox(resultat.getNode());
         topBox.setAlignment(Pos.CENTER);
         topBox.setMaxWidth(Double.MAX_VALUE);
 
-        VBox topContainer = new VBox(1,
-                bandeau.getNode(),
-                topBox
-        );
+        VBox topContainer = new VBox(1, bandeau.getNode(), topBox);
         topContainer.setAlignment(Pos.TOP_LEFT);
         topContainer.setPadding(new Insets(0, 0, 2, 0));
         topContainer.setFillWidth(true);
         root.setTop(topContainer);
 
-        // === 2) Participants (gauche) ===
         users = new Users();
         donationsLedger = new DonationsLedger();
         gains = new Gains(users.getParticipants());
         historique = new Historique(gains, donationsLedger);
         gains.setCarryOver(donationsLedger.computeCarryOver());
+
         Button historyButton = new Button("Historique");
         historyButton.setOnAction(e -> historique.show());
         Theme.styleButton(historyButton);
@@ -115,15 +148,12 @@ public class Main extends Application {
         VBox leftBox = new VBox(8, historyButton, users.getRootPane());
         leftBox.setPadding(new Insets(6, 10, 6, 18));
         leftBox.setAlignment(Pos.TOP_LEFT);
-
-        // Largeur fixe, hauteur adaptable pour libérer l'espace vertical
         leftBox.setPrefWidth(LEFT_COL_WIDTH);
         leftBox.setMinWidth(LEFT_COL_WIDTH);
         leftBox.setMaxWidth(LEFT_COL_WIDTH);
         leftBox.setPrefHeight(Region.USE_COMPUTED_SIZE);
         root.setLeft(leftBox);
 
-        // === 3) Gains (droite) ===
         VBox rightBox = new VBox(8, gains.getRootPane());
         rightBox.setPadding(new Insets(4, 18, 8, 10));
         rightBox.setAlignment(Pos.TOP_CENTER);
@@ -133,7 +163,6 @@ public class Main extends Application {
         rightBox.setPrefHeight(Region.USE_COMPUTED_SIZE);
         root.setRight(rightBox);
 
-        // === 4) Roue au centre ===
         roue = new Roue(resultat);
         Region wheelRoot = (Region) roue.getRootPane();
         wheelRoot.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
@@ -142,66 +171,25 @@ public class Main extends Application {
         StackPane centerPane = new StackPane(wheelRoot);
         centerPane.setAlignment(Pos.CENTER);
         centerPane.setPadding(Insets.EMPTY);
-        centerPane.setTranslateX(0);
-        centerPane.setTranslateY(0);
-
         root.setCenter(centerPane);
 
-        // Recharge la sauvegarde, s’il y en a une
-        try {
-            Path f = Path.of("loterie-save.txt");
-            if (Files.exists(f)) {
-                var lines = Files.readAllLines(f);
-                boolean objetsPart = false;
-                boolean bonusPart  = false;
-                for (String line : lines) {
-                    if (line.startsWith("#")) {
-                        objetsPart = line.startsWith("#Objets");
-                        bonusPart  = line.startsWith("#Bonus");
-                        continue;
-                    }
-                    if (bonusPart) {
-                        gains.setExtraKamas(Kamas.parseFlexible(line, 0));
-                    } else if (objetsPart) {
-                        gains.getObjets().add(line);
-                    } else {
-                        String[] parts = line.split(";", 3);
-                        if (parts.length == 3) {
-                            users.getParticipants().add(
-                                    new Participant(
-                                            parts[0],
-                                            Kamas.parseFlexible(parts[1], 0),
-                                            parts[2]
-                                    )
-                            );
-                        }
-                    }
-                }
-            }
-        } catch (Exception ex) {
-            System.err.println("Impossible de relire la sauvegarde : " + ex.getMessage());
-        }
+        loadSavedState();
 
-        // Mise à jour initiale de la roue
         users.getParticipants().forEach(this::attachParticipationListener);
         roue.updateWheelDisplay(users.getParticipantNames());
 
-        // Surveille les changements sur la liste de participants
-        users.getParticipants().addListener(
-                (ListChangeListener<Participant>) change -> {
-                    while (change.next()) {
-                        if (change.wasAdded()) {
-                            change.getAddedSubList().forEach(this::attachParticipationListener);
-                        }
-                        if (change.wasRemoved()) {
-                            change.getRemoved().forEach(this::detachParticipationListener);
-                        }
-                    }
-                    roue.updateWheelDisplay(users.getParticipantNames());
+        users.getParticipants().addListener((ListChangeListener<Participant>) change -> {
+            while (change.next()) {
+                if (change.wasAdded()) {
+                    change.getAddedSubList().forEach(this::attachParticipationListener);
                 }
-        );
+                if (change.wasRemoved()) {
+                    change.getRemoved().forEach(this::detachParticipationListener);
+                }
+            }
+            roue.updateWheelDisplay(users.getParticipantNames());
+        });
 
-        // === 5) Boutons en bas ===
         Button spinButton = new Button("Lancer la roue !");
         spinButton.setFont(Font.font("Arial", 16));
 
@@ -219,9 +207,7 @@ public class Main extends Application {
         Button saveButton = new Button("Sauvegarder état");
         saveButton.setOnAction(e -> {
             try {
-                Save.save(users.getParticipants(),
-                        gains.getObjets(),
-                        gains.getExtraKamas());
+                Save.save(users.getParticipants(), gains.getObjets(), gains.getExtraKamas());
                 resultat.setMessage("État sauvegardé ✔");
             } catch (IOException ex) {
                 resultat.setMessage("Erreur de sauvegarde ✖");
@@ -230,50 +216,11 @@ public class Main extends Application {
         });
 
         Button cleanButton = new Button("Nettoyer");
-        cleanButton.setOnAction(e -> {
-            ButtonType confirmType = new ButtonType("Oui, nettoyer", ButtonBar.ButtonData.OK_DONE);
-            ButtonType cancelType = new ButtonType("Annuler", ButtonBar.ButtonData.CANCEL_CLOSE);
-            Alert confirm = new Alert(
-                    Alert.AlertType.CONFIRMATION,
-                    "T'es sûr de vouloir tout clean ? La roulette repartira de zéro et toutes les données seront effacées.",
-                    confirmType,
-                    cancelType
-            );
-            confirm.setTitle("Confirmer le nettoyage complet");
-            confirm.setHeaderText("Nettoyer la loterie ?");
-            confirm.initOwner(primaryStage);
-            if (confirm.showAndWait().orElse(cancelType) != confirmType) {
-                return;
-            }
-            Save.reset(users.getParticipants(), gains.getObjets());
-            gains.resetBonus();
-            boolean resetOk = true;
-            try {
-                donationsLedger.resetCarryOver();
-                gains.setCarryOver(0);
-            } catch (IOException ex) {
-                resultat.setMessage("Erreur RAZ cagnotte cumulée : " + ex.getMessage());
-                ex.printStackTrace();
-                resetOk = false;
-            }
-            currentRoundId = null;
-            lastSnapshotSignature = null;
-            roue.updateWheelDisplay(users.getParticipantNames());
-            if (resetOk) {
-                resultat.setMessage("Nouvelle loterie prête");
-            }
-        });
+        cleanButton.setOnAction(e -> handleCleanAll());
 
-        // === Nouveau bouton "Plein écran" ===
         Button fullScreenButton = new Button("Plein écran");
-        fullScreenButton.setOnAction(e -> {
-            if (windowedFullscreen) {
-                setWindowedFullscreen(false);
-            }
-            // Bascule l'état "fullscreen" à chaque clic
-            boolean current = primaryStage.isFullScreen();
-            primaryStage.setFullScreen(!current);
-        });
+        fullScreenButton.setOnAction(e -> toggleFullScreen());
+
         windowedFullscreenButton = new Button("Plein écran fenêtré");
         windowedFullscreenButton.setOnAction(e -> setWindowedFullscreen(!windowedFullscreen));
         updateWindowedFullscreenButton();
@@ -295,66 +242,7 @@ public class Main extends Application {
                 historyButton
         };
 
-        spinButton.setOnAction(e -> {
-            if (spinButton.isDisable()) {
-                return;
-            }
-            setButtonsDisabled(true, buttonsToLock);
-
-            var tickets = users.getParticipantNames();
-            List<String> participantSnapshot = new ArrayList<>(tickets);
-
-            if (tickets.isEmpty()) {
-                resultat.setMessage("Aucun participant validé (Rejoue ? + Payé ?).");
-                setButtonsDisabled(false, buttonsToLock);
-                return;
-            }
-
-            int potSnapshot = gains.getTotalKamas();
-            if (potSnapshot <= 0) {
-                resultat.setMessage("Aucune mise enregistrée pour ce tour.");
-                setButtonsDisabled(false, buttonsToLock);
-                return;
-            }
-
-            final int roundPot = potSnapshot;
-            final String snapshotSignature = buildSnapshotSignature();
-            final int[] roundIdRef = new int[1];
-            try {
-                roundIdRef[0] = ensureRoundSnapshot(snapshotSignature);
-            } catch (IOException ex) {
-                resultat.setMessage("Erreur enregistrement dons : " + ex.getMessage());
-                ex.printStackTrace();
-                setButtonsDisabled(false, buttonsToLock);
-                return;
-            }
-            final int snapshotRoundId = roundIdRef[0];
-
-            roue.setOnSpinFinished(winnerName -> {
-                try {
-                    if (winnerName != null) {
-                        donationsLedger.appendPayout(snapshotRoundId, winnerName, roundPot);
-                        finalizeRoundAndReset();
-                        resultat.setMessage(winnerName + " remporte " + formatKamas(roundPot) + " k !");
-                        historique.logResult(winnerName, roundPot, participantSnapshot, snapshotRoundId);
-                    } else {
-                        resultat.setMessage("Perdu ! Pot conservé : " + formatKamas(roundPot) + " k");
-                        historique.logResult(null, roundPot, participantSnapshot, snapshotRoundId);
-                    }
-                } catch (IOException ex) {
-                    resultat.setMessage("Erreur payout : " + ex.getMessage());
-                    ex.printStackTrace();
-                } finally {
-                    withWheelRefreshSuppressed(() ->
-                            users.getParticipants().forEach(p -> p.setPaid(false))
-                    );
-                    setButtonsDisabled(false, buttonsToLock);
-                }
-            });
-
-            roue.updateWheelDisplay(tickets);
-            roue.spinTheWheel(tickets);
-        });
+        spinButton.setOnAction(e -> handleSpin(spinButton, buttonsToLock));
 
         Button[] bottomButtons = {
                 spinButton,
@@ -366,6 +254,7 @@ public class Main extends Application {
                 windowedFullscreenButton,
                 adaptScreenButton
         };
+
         for (Button button : bottomButtons) {
             Theme.styleButton(button);
             button.setMinWidth(Region.USE_PREF_SIZE);
@@ -379,70 +268,231 @@ public class Main extends Application {
         bottomBox.getChildren().addAll(bottomButtons);
         root.setBottom(bottomBox);
 
-        // === 6) Scène + Stage ===
         scaledViewport = new ScaledContentPane(rootPane, DESIGN_WIDTH, DESIGN_HEIGHT);
         scaledViewport.setPadding(Insets.EMPTY);
         scaledViewport.setBackground(Theme.makeBackgroundCover("/img.png"));
-        adaptiveScalingEnabled = false;
-        scaledViewport.setAllowUpscale(adaptiveScalingEnabled);
 
-        Screen initialScreen = getCurrentScreen();
-        if (initialScreen == null) {
-            initialScreen = Screen.getPrimary();
-        }
+        Screen initialScreen = Screen.getPrimary();
         lastKnownScreen = initialScreen;
+
+        adaptiveScalingEnabled = loadAdaptivePreference(initialScreen);
+        refreshViewportUpscale();
 
         Dimension2D initialSize = computeSceneSize(initialScreen, adaptiveScalingEnabled);
         scene = new Scene(scaledViewport, initialSize.getWidth(), initialSize.getHeight());
-        savedWindowWidth = initialSize.getWidth();
-        savedWindowHeight = initialSize.getHeight();
-        scene.getStylesheets().add(
-                Objects.requireNonNull(getClass().getResource("/app.css")).toExternalForm()
-        );
+        scene.getStylesheets().add(Objects.requireNonNull(getClass().getResource("/app.css")).toExternalForm());
+
         primaryStage.setTitle("Loterie de la guilde Evolution [By Coca]");
         primaryStage.setScene(scene);
         primaryStage.setMinWidth(MIN_WINDOW_WIDTH);
         primaryStage.setMinHeight(MIN_WINDOW_HEIGHT);
-        Point2D initialPosition = computeCenteredWindowPosition(initialScreen.getVisualBounds(), initialSize);
-        primaryStage.setX(initialPosition.getX());
-        primaryStage.setY(initialPosition.getY());
 
-        // -> Optionnel : enlever l'indication pour quitter le fullscreen
-        // primaryStage.setFullScreenExitHint("");
+        savedWindowWidth = initialSize.getWidth();
+        savedWindowHeight = initialSize.getHeight();
+        Point2D initialPosition = computeCenteredWindowPosition(initialScreen.getVisualBounds(), initialSize);
+        savedWindowX = initialPosition.getX();
+        savedWindowY = initialPosition.getY();
+        applyStageBounds(savedWindowX, savedWindowY, savedWindowWidth, savedWindowHeight, false);
 
         primaryStage.fullScreenProperty().addListener((obs, ov, nv) -> {
+            refreshViewportUpscale();
             if (!nv) {
-                rememberWindowBounds();
-                applySceneSizeForCurrentMode(getCurrentScreen());
+                if (suppressExitFullScreenRestore) {
+                    suppressExitFullScreenRestore = false;
+                    return;
+                }
+                Platform.runLater(() -> restoreWindowBoundsIfAvailable(false));
             }
         });
+
         primaryStage.maximizedProperty().addListener((obs, ov, nv) -> {
+            refreshViewportUpscale();
             if (!nv) {
-                rememberWindowBounds();
-                applySceneSizeForCurrentMode(getCurrentScreen());
+                if (suppressExitMaximizedRestore) {
+                    suppressExitMaximizedRestore = false;
+                    return;
+                }
+                Platform.runLater(() -> restoreWindowBoundsIfAvailable(false));
             }
         });
-        ChangeListener<Number> stageMoveResizeListener = (obs, ov, nv) -> handleStageMovedOrResized();
+
+        ChangeListener<Number> stageMoveResizeListener = (obs, ov, nv) -> onStageBoundsChanged();
         primaryStage.xProperty().addListener(stageMoveResizeListener);
         primaryStage.yProperty().addListener(stageMoveResizeListener);
         primaryStage.widthProperty().addListener(stageMoveResizeListener);
         primaryStage.heightProperty().addListener(stageMoveResizeListener);
 
         primaryStage.show();
+
         Platform.runLater(() -> {
             centerOnCurrentScreen();
             rememberWindowBounds();
+            refreshViewportUpscale();
         });
     }
 
-    private static Dimension2D computeSceneSize(Screen screen, boolean adaptiveMode) {
-        if (screen == null) {
-            screen = Screen.getPrimary();
+    private void loadSavedState() {
+        try {
+            Path f = Path.of("loterie-save.txt");
+            if (!Files.exists(f)) {
+                return;
+            }
+            List<String> lines = Files.readAllLines(f);
+            boolean objetsPart = false;
+            boolean bonusPart = false;
+            for (String line : lines) {
+                if (line == null) {
+                    continue;
+                }
+                String trimmed = line.trim();
+                if (trimmed.isEmpty()) {
+                    continue;
+                }
+                if (trimmed.startsWith("#")) {
+                    String low = trimmed.toLowerCase();
+                    objetsPart = low.startsWith("#objets");
+                    bonusPart = low.startsWith("#bonus");
+                    continue;
+                }
+                if (bonusPart) {
+                    gains.setExtraKamas(Kamas.parseFlexible(trimmed, 0));
+                    continue;
+                }
+                if (objetsPart) {
+                    gains.getObjets().add(trimmed);
+                    continue;
+                }
+                String[] parts = trimmed.split(";", 3);
+                if (parts.length == 3) {
+                    users.getParticipants().add(
+                            new Participant(
+                                    parts[0],
+                                    Kamas.parseFlexible(parts[1], 0),
+                                    parts[2]
+                            )
+                    );
+                }
+            }
+        } catch (Exception ex) {
+            System.err.println("Impossible de relire la sauvegarde : " + ex.getMessage());
         }
-        Rectangle2D bounds = screen.getVisualBounds();
-        return adaptiveMode
-                ? computeAdaptiveSceneSize(bounds)
-                : computeDesignSceneSize(bounds);
+    }
+
+    private void handleSpin(Button spinButton, Button[] buttonsToLock) {
+        if (spinButton.isDisable()) {
+            return;
+        }
+        setButtonsDisabled(true, buttonsToLock);
+
+        var tickets = users.getParticipantNames();
+        List<String> participantSnapshot = new ArrayList<>(tickets);
+
+        if (tickets.isEmpty()) {
+            resultat.setMessage("Aucun participant validé (Rejoue ? + Payé ?).");
+            setButtonsDisabled(false, buttonsToLock);
+            return;
+        }
+
+        int potSnapshot = gains.getTotalKamas();
+        if (potSnapshot <= 0) {
+            resultat.setMessage("Aucune mise enregistrée pour ce tour.");
+            setButtonsDisabled(false, buttonsToLock);
+            return;
+        }
+
+        final int roundPot = potSnapshot;
+        final String snapshotSignature = buildSnapshotSignature();
+        final int snapshotRoundId;
+        try {
+            snapshotRoundId = ensureRoundSnapshot(snapshotSignature);
+        } catch (IOException ex) {
+            resultat.setMessage("Erreur enregistrement dons : " + ex.getMessage());
+            ex.printStackTrace();
+            setButtonsDisabled(false, buttonsToLock);
+            return;
+        }
+
+        roue.setOnSpinFinished(winnerName -> {
+            try {
+                if (winnerName != null) {
+                    donationsLedger.appendPayout(snapshotRoundId, winnerName, roundPot);
+                    finalizeRoundAndReset();
+                    resultat.setMessage(winnerName + " remporte " + formatKamas(roundPot) + " k !");
+                    historique.logResult(winnerName, roundPot, participantSnapshot, snapshotRoundId);
+                } else {
+                    resultat.setMessage("Perdu ! Pot conservé : " + formatKamas(roundPot) + " k");
+                    historique.logResult(null, roundPot, participantSnapshot, snapshotRoundId);
+                }
+            } catch (IOException ex) {
+                resultat.setMessage("Erreur payout : " + ex.getMessage());
+                ex.printStackTrace();
+            } finally {
+                withWheelRefreshSuppressed(() -> users.getParticipants().forEach(p -> p.setPaid(false)));
+                setButtonsDisabled(false, buttonsToLock);
+            }
+        });
+
+        roue.updateWheelDisplay(tickets);
+        roue.spinTheWheel(tickets);
+    }
+
+    private void handleCleanAll() {
+        ButtonType confirmType = new ButtonType("Oui, nettoyer", ButtonBar.ButtonData.OK_DONE);
+        ButtonType cancelType = new ButtonType("Annuler", ButtonBar.ButtonData.CANCEL_CLOSE);
+
+        Alert confirm = new Alert(
+                Alert.AlertType.CONFIRMATION,
+                "Cela supprime tous les participants, les objets et le bonus.",
+                confirmType,
+                cancelType
+        );
+        confirm.setTitle("Confirmer le nettoyage complet");
+        confirm.setHeaderText("Nettoyer la loterie ?");
+        confirm.initOwner(primaryStage);
+
+        if (confirm.showAndWait().orElse(cancelType) != confirmType) {
+            return;
+        }
+
+        Save.reset(users.getParticipants(), gains.getObjets());
+        gains.resetBonus();
+
+        boolean resetOk = true;
+        try {
+            donationsLedger.resetCarryOver();
+            gains.setCarryOver(0);
+        } catch (IOException ex) {
+            resultat.setMessage("Erreur RAZ cagnotte cumulée : " + ex.getMessage());
+            ex.printStackTrace();
+            resetOk = false;
+        }
+
+        currentRoundId = null;
+        lastSnapshotSignature = null;
+        roue.updateWheelDisplay(users.getParticipantNames());
+
+        if (resetOk) {
+            resultat.setMessage("Nouvelle loterie prête");
+        }
+    }
+
+    private void toggleFullScreen() {
+        if (primaryStage == null) {
+            return;
+        }
+        if (windowedFullscreen) {
+            setWindowedFullscreen(false);
+        }
+        if (!primaryStage.isFullScreen()) {
+            rememberWindowBounds();
+        }
+        primaryStage.setFullScreen(!primaryStage.isFullScreen());
+    }
+
+    private static Dimension2D computeSceneSize(Screen screen, boolean adaptiveMode) {
+        Screen effective = screen != null ? screen : Screen.getPrimary();
+        Rectangle2D bounds = effective.getVisualBounds();
+        return adaptiveMode ? computeAdaptiveSceneSize(bounds) : computeDesignSceneSize(bounds);
     }
 
     static Dimension2D computeDesignSceneSize(Rectangle2D bounds) {
@@ -485,7 +535,7 @@ public class Main extends Application {
         double maxWidth = bounds.getWidth() * 0.92;
         double maxHeight = bounds.getHeight() * 0.92;
 
-        double width = Math.min(DESIGN_WIDTH, maxWidth);
+        double width = maxWidth;
         double height = width / aspectRatio;
         if (height > maxHeight) {
             height = maxHeight;
@@ -498,20 +548,22 @@ public class Main extends Application {
         if (width < minWidthCandidate) {
             width = minWidthCandidate;
             height = width / aspectRatio;
+            if (height > maxHeight) {
+                height = maxHeight;
+                width = height * aspectRatio;
+            }
         }
         if (height < minHeightCandidate) {
             height = minHeightCandidate;
             width = height * aspectRatio;
+            if (width > maxWidth) {
+                width = maxWidth;
+                height = width / aspectRatio;
+            }
         }
 
-        if (width > bounds.getWidth()) {
-            width = bounds.getWidth();
-            height = width / aspectRatio;
-        }
-        if (height > bounds.getHeight()) {
-            height = bounds.getHeight();
-            width = height * aspectRatio;
-        }
+        width = Math.min(width, bounds.getWidth());
+        height = Math.min(height, bounds.getHeight());
 
         return new Dimension2D(Math.max(320, width), Math.max(240, height));
     }
@@ -525,10 +577,7 @@ public class Main extends Application {
         }
         double x = bounds.getMinX() + (bounds.getWidth() - windowSize.getWidth()) * 0.5;
         double y = bounds.getMinY() + (bounds.getHeight() - windowSize.getHeight()) * 0.5;
-        return new Point2D(
-                Math.max(bounds.getMinX(), x),
-                Math.max(bounds.getMinY(), y)
-        );
+        return new Point2D(Math.max(bounds.getMinX(), x), Math.max(bounds.getMinY(), y));
     }
 
     private void handleAdaptScreenToggle() {
@@ -538,13 +587,24 @@ public class Main extends Application {
         if (windowedFullscreen) {
             setWindowedFullscreen(false);
         }
-        if (primaryStage.isFullScreen()) {
+
+        boolean wasFullScreen = primaryStage.isFullScreen();
+        boolean wasMaximized = primaryStage.isMaximized();
+
+        if (wasFullScreen) {
+            suppressExitFullScreenRestore = true;
             primaryStage.setFullScreen(false);
         }
-        if (primaryStage.isMaximized()) {
+        if (wasMaximized) {
+            suppressExitMaximizedRestore = true;
             primaryStage.setMaximized(false);
         }
-        setAdaptiveScaling(!adaptiveScalingEnabled);
+
+        if (wasFullScreen || wasMaximized) {
+            Platform.runLater(() -> setAdaptiveScaling(!adaptiveScalingEnabled));
+        } else {
+            setAdaptiveScaling(!adaptiveScalingEnabled);
+        }
     }
 
     private void setAdaptiveScaling(boolean enabled) {
@@ -552,15 +612,10 @@ public class Main extends Application {
             return;
         }
         adaptiveScalingEnabled = enabled;
-        if (scaledViewport != null) {
-            scaledViewport.setAllowUpscale(enabled);
-        }
+        refreshViewportUpscale();
         updateAdaptScreenButton();
-        applySceneSizeForCurrentMode();
-    }
-
-    private void applySceneSizeForCurrentMode() {
         applySceneSizeForCurrentMode(getCurrentScreen());
+        saveAdaptivePreference();
     }
 
     private void applySceneSizeForCurrentMode(Screen targetScreen) {
@@ -569,6 +624,7 @@ public class Main extends Application {
         }
         Screen screen = targetScreen != null ? targetScreen : Screen.getPrimary();
         lastKnownScreen = screen;
+
         if (windowedFullscreen) {
             applyWindowedFullscreenBounds(screen);
             return;
@@ -576,34 +632,42 @@ public class Main extends Application {
         if (primaryStage.isFullScreen()) {
             return;
         }
+
+        if (primaryStage.isMaximized()) {
+            suppressExitMaximizedRestore = true;
+            primaryStage.setMaximized(false);
+        }
+
         Dimension2D size = computeSceneSize(screen, adaptiveScalingEnabled);
-        primaryStage.setWidth(size.getWidth());
-        primaryStage.setHeight(size.getHeight());
         Point2D position = computeCenteredWindowPosition(screen.getVisualBounds(), size);
-        primaryStage.setX(position.getX());
-        primaryStage.setY(position.getY());
+        applyStageBounds(position.getX(), position.getY(), size.getWidth(), size.getHeight(), true);
     }
 
     private void updateAdaptScreenButton() {
         if (adaptScreenButton == null) {
             return;
         }
-        adaptScreenButton.setText(
-                adaptiveScalingEnabled ? "Format maquette" : "Adapter l'écran"
-        );
+        adaptScreenButton.setText(adaptiveScalingEnabled ? "Format maquette" : "Adapter l'écran");
     }
 
-    private void handleStageMovedOrResized() {
+    private void onStageBoundsChanged() {
+        if (primaryStage == null || applyingStageBounds) {
+            return;
+        }
         Screen screen = getCurrentScreen();
-        if (screen != null && !Objects.equals(screen, lastKnownScreen)) {
+        if (screen != null) {
             lastKnownScreen = screen;
-            applySceneSizeForCurrentMode(screen);
+        }
+        if (windowedFullscreen) {
+            applyWindowedFullscreenBounds(screen);
+            return;
         }
         rememberWindowBounds();
     }
 
     private void rememberWindowBounds() {
         if (primaryStage == null
+                || applyingStageBounds
                 || windowedFullscreen
                 || primaryStage.isFullScreen()
                 || primaryStage.isMaximized()) {
@@ -616,18 +680,37 @@ public class Main extends Application {
         savedResizable = primaryStage.isResizable();
     }
 
+    private void refreshViewportUpscale() {
+        if (scaledViewport == null) {
+            return;
+        }
+        boolean allowUpscale = adaptiveScalingEnabled
+                || windowedFullscreen
+                || (primaryStage != null && (primaryStage.isFullScreen() || primaryStage.isMaximized()));
+        scaledViewport.setAllowUpscale(allowUpscale);
+    }
+
     private Screen getCurrentScreen() {
         if (primaryStage == null) {
             return Screen.getPrimary();
         }
-        Rectangle2D windowBounds = new Rectangle2D(
-                primaryStage.getX(),
-                primaryStage.getY(),
-                Math.max(1, primaryStage.getWidth()),
-                Math.max(1, primaryStage.getHeight())
-        );
+        double x = primaryStage.getX();
+        double y = primaryStage.getY();
+        double w = Math.max(1, primaryStage.getWidth());
+        double h = Math.max(1, primaryStage.getHeight());
+
+        double centerX = x + w / 2.0;
+        double centerY = y + h / 2.0;
+
+        for (Screen screen : Screen.getScreens()) {
+            if (screen.getVisualBounds().contains(centerX, centerY)) {
+                return screen;
+            }
+        }
+
+        Rectangle2D windowBounds = new Rectangle2D(x, y, w, h);
         Screen bestMatch = null;
-        double bestArea = -1;
+        double bestArea = 0;
         for (Screen screen : Screen.getScreens()) {
             double overlap = intersectionArea(windowBounds, screen.getVisualBounds());
             if (overlap > bestArea) {
@@ -635,21 +718,11 @@ public class Main extends Application {
                 bestMatch = screen;
             }
         }
-        if (bestMatch != null && bestArea > 0) {
-            return bestMatch;
-        }
-        double centerX = windowBounds.getMinX() + windowBounds.getWidth() / 2.0;
-        double centerY = windowBounds.getMinY() + windowBounds.getHeight() / 2.0;
-        for (Screen screen : Screen.getScreens()) {
-            if (screen.getVisualBounds().contains(centerX, centerY)) {
-                return screen;
-            }
-        }
-        return Screen.getPrimary();
+        return bestMatch != null ? bestMatch : Screen.getPrimary();
     }
 
     private void centerOnCurrentScreen() {
-        if (primaryStage == null) {
+        if (primaryStage == null || windowedFullscreen || primaryStage.isFullScreen() || primaryStage.isMaximized()) {
             return;
         }
         Screen screen = getCurrentScreen();
@@ -661,13 +734,9 @@ public class Main extends Application {
         if (width <= 0 || height <= 0) {
             return;
         }
-        Point2D position = computeCenteredWindowPosition(
-                screen.getVisualBounds(),
-                new Dimension2D(width, height)
-        );
+        Point2D position = computeCenteredWindowPosition(screen.getVisualBounds(), new Dimension2D(width, height));
         lastKnownScreen = screen;
-        primaryStage.setX(position.getX());
-        primaryStage.setY(position.getY());
+        applyStageBounds(position.getX(), position.getY(), width, height, false);
     }
 
     private static double intersectionArea(Rectangle2D a, Rectangle2D b) {
@@ -687,51 +756,133 @@ public class Main extends Application {
         if (primaryStage == null || windowedFullscreen == enable) {
             return;
         }
+
         if (enable) {
             rememberWindowBounds();
             windowedFullscreen = true;
-            primaryStage.setFullScreen(false);
-            primaryStage.setMaximized(false);
-            primaryStage.setResizable(false);
-            Screen screen = getCurrentScreen();
-            if (screen == null) {
-                screen = Screen.getPrimary();
+
+            boolean wasFullScreen = primaryStage.isFullScreen();
+            boolean wasMaximized = primaryStage.isMaximized();
+
+            if (wasFullScreen) {
+                suppressExitFullScreenRestore = true;
+                primaryStage.setFullScreen(false);
             }
-            lastKnownScreen = screen;
-            applyWindowedFullscreenBounds(screen);
+            if (wasMaximized) {
+                suppressExitMaximizedRestore = true;
+                primaryStage.setMaximized(false);
+            }
+
+            primaryStage.setResizable(false);
+
+            Screen screen = getCurrentScreen();
+            final Screen targetScreen = (screen != null) ? screen : Screen.getPrimary();
+            lastKnownScreen = targetScreen;
+
+            Platform.runLater(() -> applyWindowedFullscreenBounds(targetScreen));
         } else {
             windowedFullscreen = false;
             primaryStage.setResizable(savedResizable);
-            if (!Double.isNaN(savedWindowX) && !Double.isNaN(savedWindowY)) {
-                primaryStage.setX(savedWindowX);
-                primaryStage.setY(savedWindowY);
-            }
-            if (!Double.isNaN(savedWindowWidth) && !Double.isNaN(savedWindowHeight)) {
-                primaryStage.setWidth(savedWindowWidth);
-                primaryStage.setHeight(savedWindowHeight);
-            }
-            applySceneSizeForCurrentMode(getCurrentScreen());
+            restoreWindowBoundsIfAvailable(false);
         }
+
         updateWindowedFullscreenButton();
+        refreshViewportUpscale();
+    }
+
+    private void restoreWindowBoundsIfAvailable(boolean forceCenter) {
+        if (primaryStage == null || windowedFullscreen) {
+            return;
+        }
+
+        Screen screen = getCurrentScreen();
+        if (screen == null) {
+            screen = Screen.getPrimary();
+        }
+        Rectangle2D bounds = screen.getVisualBounds();
+
+        double width = savedWindowWidth;
+        double height = savedWindowHeight;
+        if (!Double.isFinite(width) || width <= 0 || !Double.isFinite(height) || height <= 0) {
+            applySceneSizeForCurrentMode(screen);
+            return;
+        }
+
+        double minWidthCandidate = Math.min(MIN_WINDOW_WIDTH, bounds.getWidth());
+        double minHeightCandidate = Math.min(MIN_WINDOW_HEIGHT, bounds.getHeight());
+
+        width = clamp(width, minWidthCandidate, bounds.getWidth());
+        height = clamp(height, minHeightCandidate, bounds.getHeight());
+
+        double x = savedWindowX;
+        double y = savedWindowY;
+
+        if (forceCenter || !Double.isFinite(x) || !Double.isFinite(y)) {
+            Point2D position = computeCenteredWindowPosition(bounds, new Dimension2D(width, height));
+            x = position.getX();
+            y = position.getY();
+        } else {
+            double maxX = bounds.getMaxX() - width;
+            double maxY = bounds.getMaxY() - height;
+            x = clamp(x, bounds.getMinX(), maxX);
+            y = clamp(y, bounds.getMinY(), maxY);
+        }
+
+        applyStageBounds(x, y, width, height, false);
+        lastKnownScreen = screen;
+    }
+
+    private static double clamp(double value, double min, double max) {
+        if (!Double.isFinite(value)) {
+            return min;
+        }
+        if (max < min) {
+            return min;
+        }
+        return Math.max(min, Math.min(value, max));
     }
 
     private void applyWindowedFullscreenBounds(Screen screen) {
+        Screen target = screen != null ? screen : Screen.getPrimary();
+        Rectangle2D bounds = target.getVisualBounds();
+        applyStageBounds(bounds.getMinX(), bounds.getMinY(), bounds.getWidth(), bounds.getHeight(), false);
+    }
+
+    private void applyStageBounds(double x, double y, double width, double height, boolean updateSavedBounds) {
         if (primaryStage == null) {
             return;
         }
-        Screen target = screen != null ? screen : Screen.getPrimary();
-        Rectangle2D bounds = target.getVisualBounds();
-        primaryStage.setX(bounds.getMinX());
-        primaryStage.setY(bounds.getMinY());
-        primaryStage.setWidth(bounds.getWidth());
-        primaryStage.setHeight(bounds.getHeight());
+
+        applyingStageBounds = true;
+        try {
+            if (primaryStage.isMaximized()) {
+                suppressExitMaximizedRestore = true;
+                primaryStage.setMaximized(false);
+            }
+            if (Double.isFinite(width) && width > 0) {
+                primaryStage.setWidth(width);
+            }
+            if (Double.isFinite(height) && height > 0) {
+                primaryStage.setHeight(height);
+            }
+            if (Double.isFinite(x)) {
+                primaryStage.setX(x);
+            }
+            if (Double.isFinite(y)) {
+                primaryStage.setY(y);
+            }
+        } finally {
+            applyingStageBounds = false;
+        }
+
+        if (updateSavedBounds) {
+            rememberWindowBounds();
+        }
     }
 
     private void updateWindowedFullscreenButton() {
         if (windowedFullscreenButton != null) {
-            windowedFullscreenButton.setText(
-                    windowedFullscreen ? "Quitter plein écran fenêtré" : "Plein écran fenêtré"
-            );
+            windowedFullscreenButton.setText(windowedFullscreen ? "Quitter plein écran fenêtré" : "Plein écran fenêtré");
         }
     }
 
@@ -777,9 +928,7 @@ public class Main extends Application {
 
     private int ensureRoundSnapshot(String snapshotSignature) throws IOException {
         int roundId = (currentRoundId != null) ? currentRoundId : donationsLedger.getNextRoundId();
-        if (lastSnapshotSignature == null
-                || !lastSnapshotSignature.equals(snapshotSignature)
-                || currentRoundId == null) {
+        if (lastSnapshotSignature == null || !lastSnapshotSignature.equals(snapshotSignature) || currentRoundId == null) {
             donationsLedger.upsertRoundSnapshot(roundId, users.getParticipants(), gains.getExtraKamas());
             gains.setCarryOver(donationsLedger.computeCarryOver());
             lastSnapshotSignature = snapshotSignature;
@@ -791,9 +940,7 @@ public class Main extends Application {
     private Integer finalizeRoundAndReset() {
         int total = gains.getTotalKamas();
         if (total <= 0) {
-            withWheelRefreshSuppressed(() ->
-                    users.getParticipants().forEach(p -> p.setPaid(false))
-            );
+            withWheelRefreshSuppressed(() -> users.getParticipants().forEach(p -> p.setPaid(false)));
             currentRoundId = null;
             lastSnapshotSignature = null;
             return null;
@@ -803,9 +950,7 @@ public class Main extends Application {
             int roundId = ensureRoundSnapshot(snapshotSignature);
             users.resetKamasToZero();
             gains.resetBonus();
-            withWheelRefreshSuppressed(() ->
-                    users.getParticipants().forEach(p -> p.setPaid(false))
-            );
+            withWheelRefreshSuppressed(() -> users.getParticipants().forEach(p -> p.setPaid(false)));
             currentRoundId = null;
             lastSnapshotSignature = null;
             gains.setCarryOver(donationsLedger.computeCarryOver());
