@@ -35,6 +35,7 @@ public final class ScaledContentPane extends Region {
         setClip(clip);
 
         setSnapToPixel(true);
+        allowUpscale.addListener((obs, oldVal, newVal) -> requestLayout());
     }
 
     public boolean isAllowUpscale() { return allowUpscale.get(); }

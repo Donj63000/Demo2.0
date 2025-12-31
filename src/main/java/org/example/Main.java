@@ -5,6 +5,7 @@ import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
 import javafx.collections.ListChangeListener;
 import javafx.geometry.Dimension2D;
+import javafx.geometry.Point2D;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
@@ -51,6 +52,7 @@ public class Main extends Application {
     private BorderPane rootPane;
     private Scene scene;
     private ScaledContentPane scaledViewport;
+    private Screen lastKnownScreen;
     private boolean windowedFullscreen;
     private double savedWindowX = Double.NaN;
     private double savedWindowY = Double.NaN;
@@ -58,6 +60,8 @@ public class Main extends Application {
     private double savedWindowHeight = INITIAL_WINDOW_HEIGHT;
     private boolean savedResizable = true;
     private Button windowedFullscreenButton;
+    private Button adaptScreenButton;
+    private boolean adaptiveScalingEnabled;
 
     private DonationsLedger donationsLedger;
     private Integer currentRoundId;
@@ -205,7 +209,7 @@ public class Main extends Application {
         optionsButton.setOnAction(e -> {
             OptionRoue optWin = new OptionRoue();
             optWin.showAndWait();
-            primaryStage.centerOnScreen();
+            centerOnCurrentScreen();
             roue.updateWheelDisplay(users.getParticipantNames());
         });
 
@@ -274,6 +278,11 @@ public class Main extends Application {
         windowedFullscreenButton.setOnAction(e -> setWindowedFullscreen(!windowedFullscreen));
         updateWindowedFullscreenButton();
 
+        adaptScreenButton = new Button("Adapter l'écran");
+        adaptScreenButton.setOnAction(e -> handleAdaptScreenToggle());
+        Theme.styleButton(adaptScreenButton);
+        updateAdaptScreenButton();
+
         Button[] buttonsToLock = {
                 spinButton,
                 optionsButton,
@@ -282,6 +291,7 @@ public class Main extends Application {
                 cleanButton,
                 fullScreenButton,
                 windowedFullscreenButton,
+                adaptScreenButton,
                 historyButton
         };
 
@@ -353,7 +363,8 @@ public class Main extends Application {
                 saveButton,
                 cleanButton,
                 fullScreenButton,
-                windowedFullscreenButton
+                windowedFullscreenButton,
+                adaptScreenButton
         };
         for (Button button : bottomButtons) {
             Theme.styleButton(button);
@@ -372,10 +383,16 @@ public class Main extends Application {
         scaledViewport = new ScaledContentPane(rootPane, DESIGN_WIDTH, DESIGN_HEIGHT);
         scaledViewport.setPadding(Insets.EMPTY);
         scaledViewport.setBackground(Theme.makeBackgroundCover("/img.png"));
-        // Autorise l'UI à s'adapter aux écrans plus petits et plus grands.
-        scaledViewport.setAllowUpscale(true);
+        adaptiveScalingEnabled = false;
+        scaledViewport.setAllowUpscale(adaptiveScalingEnabled);
 
-        Dimension2D initialSize = computeInitialSceneSize(getCurrentScreen());
+        Screen initialScreen = getCurrentScreen();
+        if (initialScreen == null) {
+            initialScreen = Screen.getPrimary();
+        }
+        lastKnownScreen = initialScreen;
+
+        Dimension2D initialSize = computeSceneSize(initialScreen, adaptiveScalingEnabled);
         scene = new Scene(scaledViewport, initialSize.getWidth(), initialSize.getHeight());
         savedWindowWidth = initialSize.getWidth();
         savedWindowHeight = initialSize.getHeight();
@@ -386,6 +403,9 @@ public class Main extends Application {
         primaryStage.setScene(scene);
         primaryStage.setMinWidth(MIN_WINDOW_WIDTH);
         primaryStage.setMinHeight(MIN_WINDOW_HEIGHT);
+        Point2D initialPosition = computeCenteredWindowPosition(initialScreen.getVisualBounds(), initialSize);
+        primaryStage.setX(initialPosition.getX());
+        primaryStage.setY(initialPosition.getY());
 
         // -> Optionnel : enlever l'indication pour quitter le fullscreen
         // primaryStage.setFullScreenExitHint("");
@@ -393,31 +413,75 @@ public class Main extends Application {
         primaryStage.fullScreenProperty().addListener((obs, ov, nv) -> {
             if (!nv) {
                 rememberWindowBounds();
+                applySceneSizeForCurrentMode(getCurrentScreen());
             }
         });
         primaryStage.maximizedProperty().addListener((obs, ov, nv) -> {
             if (!nv) {
                 rememberWindowBounds();
+                applySceneSizeForCurrentMode(getCurrentScreen());
             }
         });
-        ChangeListener<Number> stageMoveResizeListener = (obs, ov, nv) -> rememberWindowBounds();
+        ChangeListener<Number> stageMoveResizeListener = (obs, ov, nv) -> handleStageMovedOrResized();
         primaryStage.xProperty().addListener(stageMoveResizeListener);
         primaryStage.yProperty().addListener(stageMoveResizeListener);
         primaryStage.widthProperty().addListener(stageMoveResizeListener);
         primaryStage.heightProperty().addListener(stageMoveResizeListener);
 
         primaryStage.show();
-        primaryStage.centerOnScreen();
-        Platform.runLater(this::rememberWindowBounds);
+        Platform.runLater(() -> {
+            centerOnCurrentScreen();
+            rememberWindowBounds();
+        });
     }
 
-    private static Dimension2D computeInitialSceneSize(Screen screen) {
+    private static Dimension2D computeSceneSize(Screen screen, boolean adaptiveMode) {
         if (screen == null) {
             screen = Screen.getPrimary();
         }
         Rectangle2D bounds = screen.getVisualBounds();
-        double aspectRatio = DESIGN_WIDTH / DESIGN_HEIGHT;
+        return adaptiveMode
+                ? computeAdaptiveSceneSize(bounds)
+                : computeDesignSceneSize(bounds);
+    }
 
+    static Dimension2D computeDesignSceneSize(Rectangle2D bounds) {
+        double aspectRatio = DESIGN_WIDTH / DESIGN_HEIGHT;
+        double maxWidth = Math.min(DESIGN_WIDTH, bounds.getWidth());
+        double maxHeight = Math.min(DESIGN_HEIGHT, bounds.getHeight());
+
+        double width = maxWidth;
+        double height = width / aspectRatio;
+        if (height > maxHeight) {
+            height = maxHeight;
+            width = height * aspectRatio;
+        }
+
+        double minWidthCandidate = Math.min(MIN_WINDOW_WIDTH, bounds.getWidth());
+        double minHeightCandidate = Math.min(MIN_WINDOW_HEIGHT, bounds.getHeight());
+
+        if (width < minWidthCandidate) {
+            width = minWidthCandidate;
+            height = width / aspectRatio;
+            if (height > maxHeight) {
+                height = maxHeight;
+                width = height * aspectRatio;
+            }
+        }
+        if (height < minHeightCandidate) {
+            height = minHeightCandidate;
+            width = height * aspectRatio;
+            if (width > maxWidth) {
+                width = maxWidth;
+                height = width / aspectRatio;
+            }
+        }
+
+        return new Dimension2D(width, height);
+    }
+
+    static Dimension2D computeAdaptiveSceneSize(Rectangle2D bounds) {
+        double aspectRatio = DESIGN_WIDTH / DESIGN_HEIGHT;
         double maxWidth = bounds.getWidth() * 0.92;
         double maxHeight = bounds.getHeight() * 0.92;
 
@@ -450,6 +514,92 @@ public class Main extends Application {
         }
 
         return new Dimension2D(Math.max(320, width), Math.max(240, height));
+    }
+
+    static Point2D computeCenteredWindowPosition(Rectangle2D bounds, Dimension2D windowSize) {
+        if (bounds == null) {
+            throw new IllegalArgumentException("bounds must not be null");
+        }
+        if (windowSize == null) {
+            throw new IllegalArgumentException("windowSize must not be null");
+        }
+        double x = bounds.getMinX() + (bounds.getWidth() - windowSize.getWidth()) * 0.5;
+        double y = bounds.getMinY() + (bounds.getHeight() - windowSize.getHeight()) * 0.5;
+        return new Point2D(
+                Math.max(bounds.getMinX(), x),
+                Math.max(bounds.getMinY(), y)
+        );
+    }
+
+    private void handleAdaptScreenToggle() {
+        if (primaryStage == null) {
+            return;
+        }
+        if (windowedFullscreen) {
+            setWindowedFullscreen(false);
+        }
+        if (primaryStage.isFullScreen()) {
+            primaryStage.setFullScreen(false);
+        }
+        if (primaryStage.isMaximized()) {
+            primaryStage.setMaximized(false);
+        }
+        setAdaptiveScaling(!adaptiveScalingEnabled);
+    }
+
+    private void setAdaptiveScaling(boolean enabled) {
+        if (adaptiveScalingEnabled == enabled) {
+            return;
+        }
+        adaptiveScalingEnabled = enabled;
+        if (scaledViewport != null) {
+            scaledViewport.setAllowUpscale(enabled);
+        }
+        updateAdaptScreenButton();
+        applySceneSizeForCurrentMode();
+    }
+
+    private void applySceneSizeForCurrentMode() {
+        applySceneSizeForCurrentMode(getCurrentScreen());
+    }
+
+    private void applySceneSizeForCurrentMode(Screen targetScreen) {
+        if (primaryStage == null || scaledViewport == null) {
+            return;
+        }
+        Screen screen = targetScreen != null ? targetScreen : Screen.getPrimary();
+        lastKnownScreen = screen;
+        if (windowedFullscreen) {
+            applyWindowedFullscreenBounds(screen);
+            return;
+        }
+        if (primaryStage.isFullScreen()) {
+            return;
+        }
+        Dimension2D size = computeSceneSize(screen, adaptiveScalingEnabled);
+        primaryStage.setWidth(size.getWidth());
+        primaryStage.setHeight(size.getHeight());
+        Point2D position = computeCenteredWindowPosition(screen.getVisualBounds(), size);
+        primaryStage.setX(position.getX());
+        primaryStage.setY(position.getY());
+    }
+
+    private void updateAdaptScreenButton() {
+        if (adaptScreenButton == null) {
+            return;
+        }
+        adaptScreenButton.setText(
+                adaptiveScalingEnabled ? "Format maquette" : "Adapter l'écran"
+        );
+    }
+
+    private void handleStageMovedOrResized() {
+        Screen screen = getCurrentScreen();
+        if (screen != null && !Objects.equals(screen, lastKnownScreen)) {
+            lastKnownScreen = screen;
+            applySceneSizeForCurrentMode(screen);
+        }
+        rememberWindowBounds();
     }
 
     private void rememberWindowBounds() {
@@ -498,6 +648,28 @@ public class Main extends Application {
         return Screen.getPrimary();
     }
 
+    private void centerOnCurrentScreen() {
+        if (primaryStage == null) {
+            return;
+        }
+        Screen screen = getCurrentScreen();
+        if (screen == null) {
+            return;
+        }
+        double width = primaryStage.getWidth();
+        double height = primaryStage.getHeight();
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        Point2D position = computeCenteredWindowPosition(
+                screen.getVisualBounds(),
+                new Dimension2D(width, height)
+        );
+        lastKnownScreen = screen;
+        primaryStage.setX(position.getX());
+        primaryStage.setY(position.getY());
+    }
+
     private static double intersectionArea(Rectangle2D a, Rectangle2D b) {
         double minX = Math.max(a.getMinX(), b.getMinX());
         double minY = Math.max(a.getMinY(), b.getMinY());
@@ -517,15 +689,16 @@ public class Main extends Application {
         }
         if (enable) {
             rememberWindowBounds();
-            Rectangle2D bounds = getCurrentScreen().getVisualBounds();
             windowedFullscreen = true;
             primaryStage.setFullScreen(false);
             primaryStage.setMaximized(false);
             primaryStage.setResizable(false);
-            primaryStage.setX(bounds.getMinX());
-            primaryStage.setY(bounds.getMinY());
-            primaryStage.setWidth(bounds.getWidth());
-            primaryStage.setHeight(bounds.getHeight());
+            Screen screen = getCurrentScreen();
+            if (screen == null) {
+                screen = Screen.getPrimary();
+            }
+            lastKnownScreen = screen;
+            applyWindowedFullscreenBounds(screen);
         } else {
             windowedFullscreen = false;
             primaryStage.setResizable(savedResizable);
@@ -537,8 +710,21 @@ public class Main extends Application {
                 primaryStage.setWidth(savedWindowWidth);
                 primaryStage.setHeight(savedWindowHeight);
             }
+            applySceneSizeForCurrentMode(getCurrentScreen());
         }
         updateWindowedFullscreenButton();
+    }
+
+    private void applyWindowedFullscreenBounds(Screen screen) {
+        if (primaryStage == null) {
+            return;
+        }
+        Screen target = screen != null ? screen : Screen.getPrimary();
+        Rectangle2D bounds = target.getVisualBounds();
+        primaryStage.setX(bounds.getMinX());
+        primaryStage.setY(bounds.getMinY());
+        primaryStage.setWidth(bounds.getWidth());
+        primaryStage.setHeight(bounds.getHeight());
     }
 
     private void updateWindowedFullscreenButton() {
